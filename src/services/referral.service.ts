@@ -1,8 +1,7 @@
 import { WalletTxType } from '@prisma/client';
 import { prisma } from '@/db/client';
+import { config } from '@/lib/config';
 import { logger } from '@/lib/logger';
-
-const COMMISSION_PERCENT = 10;
 
 type CommissionResult =
   | { credited: true; referrerId: bigint; commission: bigint }
@@ -18,7 +17,7 @@ export const referralService = {
       const referral = await prisma.referral.findUnique({ where: { refereeId: buyerId } });
       if (!referral) return { credited: false };
 
-      const commission = (purchaseAmount * BigInt(COMMISSION_PERCENT)) / 100n;
+      const commission = (purchaseAmount * BigInt(config.REFERRAL_COMMISSION_PERCENT)) / 100n;
       if (commission <= 0n) return { credited: false };
 
       await prisma.$transaction(async (tx) => {

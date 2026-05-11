@@ -55,6 +55,12 @@ const schema = z.object({
     .default('/sub/')
     .refine((val) => val.startsWith('/') && val.endsWith('/'), 'XUI_SUB_PATH must start and end with /'),
 
+  REFERRAL_COMMISSION_PERCENT: z
+    .string()
+    .default('5')
+    .transform((val) => parseInt(val, 10))
+    .refine((n) => !isNaN(n) && n >= 0 && n <= 50, 'REFERRAL_COMMISSION_PERCENT must be 0–50'),
+
   PRICE_PER_GB_TOMAN: z
     .string()
     .min(1, 'PRICE_PER_GB_TOMAN is required')

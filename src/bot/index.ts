@@ -11,6 +11,7 @@ import { registerSupportHandler } from './handlers/support.handler';
 import { registerSupportReplyHandler } from './handlers/admin/support-reply.handler';
 import { registerMyServicesHandler } from './handlers/my-services.handler';
 import { registerBuyHandler } from './handlers/buy.handler';
+import { registerInviteHandler } from './handlers/invite.handler';
 import { supportMessageConversation, supportFollowupConversation } from './conversations/support-message.conversation';
 
 export function createBot(): Bot<BotContext> {
@@ -34,6 +35,7 @@ export function createBot(): Bot<BotContext> {
 
   registerStartHandler(bot);
   registerMyServicesHandler(bot);
+  registerInviteHandler(bot);
   registerAppsHandler(bot);
   registerSupportHandler(bot);
   registerAdminHandlers(bot);

@@ -39,3 +39,27 @@ export function progressBar(usedRatio: number, length = 10): string {
   const filled = Math.min(length, Math.max(0, Math.round(usedRatio * length)));
   return '▰'.repeat(filled) + '▱'.repeat(length - filled);
 }
+
+export function toPersianDigits(s: string | number): string {
+  return String(s).replace(/[0-9]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
+}
+
+export function timeAgo(date: Date): string {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 60) return 'لحظاتی پیش';
+
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} دقیقه پیش`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} ساعت پیش`;
+
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} روز پیش`;
+
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months} ماه پیش`;
+
+  const years = Math.floor(months / 12);
+  return `${years} سال پیش`;
+}
