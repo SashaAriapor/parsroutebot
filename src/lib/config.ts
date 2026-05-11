@@ -55,6 +55,30 @@ const schema = z.object({
     .default('/sub/')
     .refine((val) => val.startsWith('/') && val.endsWith('/'), 'XUI_SUB_PATH must start and end with /'),
 
+  PRICE_PER_GB_TOMAN: z
+    .string()
+    .min(1, 'PRICE_PER_GB_TOMAN is required')
+    .refine((val) => /^\d+$/.test(val.trim()) && parseInt(val.trim(), 10) > 0, 'PRICE_PER_GB_TOMAN must be a positive integer')
+    .transform((val) => BigInt(val.trim())),
+
+  MIN_GB: z
+    .string()
+    .default('1')
+    .transform((val) => parseInt(val, 10))
+    .refine((n) => !isNaN(n) && n > 0, 'MIN_GB must be a positive integer'),
+
+  MAX_GB: z
+    .string()
+    .default('1000')
+    .transform((val) => parseInt(val, 10))
+    .refine((n) => !isNaN(n) && n > 0, 'MAX_GB must be a positive integer'),
+
+  DEFAULT_DURATION_DAYS: z
+    .string()
+    .default('30')
+    .transform((val) => parseInt(val, 10))
+    .refine((n) => !isNaN(n) && n > 0, 'DEFAULT_DURATION_DAYS must be a positive integer'),
+
   TON_WALLET_ADDRESS: z
     .string()
     .refine(

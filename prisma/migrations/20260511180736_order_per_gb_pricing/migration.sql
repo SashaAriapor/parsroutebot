@@ -1,0 +1,11 @@
+-- DropForeignKey
+ALTER TABLE "Order" DROP CONSTRAINT "Order_planId_fkey";
+
+-- AlterTable
+ALTER TABLE "Order" ADD COLUMN     "durationDays" INTEGER NOT NULL DEFAULT 30,
+ADD COLUMN     "pricePerGB" BIGINT,
+ADD COLUMN     "trafficGB" INTEGER NOT NULL DEFAULT 0,
+ALTER COLUMN "planId" DROP NOT NULL;
+
+-- AddForeignKey
+ALTER TABLE "Order" ADD CONSTRAINT "Order_planId_fkey" FOREIGN KEY ("planId") REFERENCES "Plan"("id") ON DELETE SET NULL ON UPDATE CASCADE;

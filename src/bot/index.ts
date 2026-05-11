@@ -10,6 +10,7 @@ import { registerAppsHandler } from './handlers/apps.handler';
 import { registerSupportHandler } from './handlers/support.handler';
 import { registerSupportReplyHandler } from './handlers/admin/support-reply.handler';
 import { registerMyServicesHandler } from './handlers/my-services.handler';
+import { registerBuyHandler } from './handlers/buy.handler';
 import { supportMessageConversation, supportFollowupConversation } from './conversations/support-message.conversation';
 
 export function createBot(): Bot<BotContext> {
@@ -29,6 +30,7 @@ export function createBot(): Bot<BotContext> {
   // Admin reply uses pending-state (not conversations) — register BEFORE
   // bot.hears handlers so its message:text listener has first pick.
   registerSupportReplyHandler(bot);
+  registerBuyHandler(bot);   // message:text for discount input, before bot.hears
 
   registerStartHandler(bot);
   registerMyServicesHandler(bot);

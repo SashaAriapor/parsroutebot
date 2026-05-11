@@ -199,8 +199,12 @@ model VpnConfig {
 model Order {
   id       String @id @default(cuid())
   userId   BigInt
-  planId   Int
+  planId   Int?    // null for per-GB orders
   serverId Int?
+
+  trafficGB    Int    @default(0)
+  durationDays Int    @default(30)
+  pricePerGB   BigInt?   // set for per-GB orders, null for plan-based renewals
 
   priceToman     BigInt
   discountCode   String?
@@ -221,7 +225,7 @@ model Order {
   completedAt DateTime?
 
   user       User       @relation(fields: [userId], references: [id])
-  plan       Plan       @relation(fields: [planId], references: [id])
+  plan       Plan?      @relation(fields: [planId], references: [id])
   config     VpnConfig? @relation(fields: [configId], references: [id])
   tonPayment TonPayment?
 
