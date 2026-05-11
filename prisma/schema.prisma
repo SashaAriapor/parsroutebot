@@ -15,11 +15,38 @@ model User {
   isBanned     Boolean @default(false)
 
   // Wallet balance in Toman (IRT). Always BigInt — never Number.
-  // Toman has no practical sub-units, so we store the integer amount directly.
   walletBalance BigInt @default(0)
 
   referredById BigInt?
   referralCode String   @unique // 8-char nanoid, generated on first upsert
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  tickets Ticket[]
+}
+
+enum TicketStatus {
+  OPEN
+  CLOSED
+}
+
+model Ticket {
+  id               Int           @id @default(autoincrement())
+  userId           BigInt
+  user             User          @relation(fields: [userId], references: [id])
+  status           TicketStatus  @default(OPEN)
+  channelMessageId Int?          // message_id of the first post in LOG_CHANNEL
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  messages TicketMessage[]
+}
+
+model TicketMessage {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int
+  ticket    Ticket   @relation(fields: [ticketId], references: [id])
+  fromAdmin Boolean  @default(false)
+  text      String
+  createdAt DateTime @default(now())
 }
