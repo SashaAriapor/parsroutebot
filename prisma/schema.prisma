@@ -1,0 +1,25 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           BigInt  @id // Telegram user ID (can exceed 32-bit int range)
+  username     String?
+  firstName    String?
+  languageCode String?
+  isBanned     Boolean @default(false)
+
+  // Wallet balance in Toman (IRT). Always BigInt — never Number.
+  // Toman has no practical sub-units, so we store the integer amount directly.
+  walletBalance BigInt @default(0)
+
+  referredById BigInt?
+  referralCode String   @unique // 8-char nanoid, generated on first upsert
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
