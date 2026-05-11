@@ -6,6 +6,7 @@ import { logger } from '../lib/logger';
 import { userSyncMiddleware } from './middlewares/user-sync.middleware';
 import { registerStartHandler } from './handlers/start.handler';
 import { registerAdminHandlers } from './handlers/admin/menu.handler';
+import { registerAppsHandler } from './handlers/apps.handler';
 
 export function createBot(): Bot<BotContext> {
   const bot = new Bot<BotContext>(config.BOT_TOKEN);
@@ -18,6 +19,7 @@ export function createBot(): Bot<BotContext> {
   bot.use(userSyncMiddleware);
 
   registerStartHandler(bot);
+  registerAppsHandler(bot);
   registerAdminHandlers(bot);
 
   bot.catch((err) => {

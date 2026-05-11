@@ -25,5 +25,4 @@ export function registerStartHandler(bot: Bot<BotContext>): void {
   bot.hears(MENU.WALLET, (ctx) => ctx.reply('🚧 به‌زودی...'));
   bot.hears(MENU.INVITE, (ctx) => ctx.reply('🚧 به‌زودی...'));
   bot.hears(MENU.SUPPORT, (ctx) => ctx.reply('🚧 به‌زودی...'));
-  bot.hears(MENU.APPS, (ctx) => ctx.reply('🚧 به‌زودی...'));
 }
