@@ -5,7 +5,10 @@
       "Bash(npx prisma *)",
       "Bash(npm run *)",
       "Bash(pnpm install *)",
-      "Bash(pnpm typecheck *)"
+      "Bash(pnpm typecheck *)",
+      "Bash(pnpm db:seed *)",
+      "Bash(node *)",
+      "Bash(pnpm add *)"
     ]
   }
 }

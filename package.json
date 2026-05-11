@@ -9,9 +9,13 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
+    "db:seed": "prisma db seed",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
     "test:xui": "tsx scripts/test-xui.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@grammyjs/conversations": "^1.2.0",
@@ -24,11 +28,13 @@
     "nanoid": "^3.3.7",
     "pino": "^8.17.0",
     "pino-pretty": "^10.3.0",
+    "qrcode": "^1.5.4",
     "tough-cookie": "^6.0.1",
     "zod": "^3.22.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/qrcode": "^1.5.6",
     "@types/tough-cookie": "^4.0.5",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",

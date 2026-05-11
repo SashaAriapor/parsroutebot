@@ -20,7 +20,6 @@ export function registerStartHandler(bot: Bot<BotContext>): void {
     });
   });
 
-  bot.hears(MENU.MY_SERVICES, (ctx) => ctx.reply('🚧 به‌زودی...'));
   bot.hears(MENU.BUY, (ctx) => ctx.reply('🚧 به‌زودی...'));
   bot.hears(MENU.WALLET, (ctx) => ctx.reply('🚧 به‌زودی...'));
   bot.hears(MENU.INVITE, (ctx) => ctx.reply('🚧 به‌زودی...'));

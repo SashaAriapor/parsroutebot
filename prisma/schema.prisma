@@ -1,3 +1,9 @@
+// Money convention:
+//   - All Toman amounts: BigInt (no decimals)
+//   - All TON amounts:   BigInt in nanoTON (1 TON = 1_000_000_000 nanoTON)
+// Time convention:
+//   - All DateTime fields stored in UTC.
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -7,37 +13,99 @@ generator client {
   provider = "prisma-client-js"
 }
 
-model User {
-  id           BigInt  @id // Telegram user ID (can exceed 32-bit int range)
-  username     String?
-  firstName    String?
-  languageCode String?
-  isBanned     Boolean @default(false)
-
-  // Wallet balance in Toman (IRT). Always BigInt — never Number.
-  walletBalance BigInt @default(0)
-
-  referredById BigInt?
-  referralCode String   @unique // 8-char nanoid, generated on first upsert
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  tickets Ticket[]
-}
+// ─── Enums ───────────────────────────────────────────────────────────────────
 
 enum TicketStatus {
   OPEN
   CLOSED
 }
 
+enum OrderStatus {
+  PENDING
+  PAID
+  COMPLETED
+  EXPIRED
+  CANCELLED
+  FAILED
+}
+
+enum PaymentMethod {
+  WALLET
+  TON
+}
+
+enum ConfigStatus {
+  ACTIVE
+  EXPIRED
+  DISABLED
+  DELETED
+}
+
+enum WalletTxType {
+  TOPUP_TON
+  TOPUP_ADMIN
+  PURCHASE
+  REFUND
+  REFERRAL_COMMISSION
+  ADMIN_DEDUCT
+}
+
+enum TonPaymentStatus {
+  DETECTED
+  MATCHED
+  ORPHANED
+}
+
+enum AdminActionType {
+  WALLET_ADD
+  WALLET_DEDUCT
+  GIFT_SERVICE
+  EXTEND_SERVICE
+  ADD_TRAFFIC
+  BAN_USER
+  UNBAN_USER
+  BROADCAST
+  CREATE_DISCOUNT
+  REPLY_TICKET
+}
+
+// ─── Models ──────────────────────────────────────────────────────────────────
+
+model User {
+  id           BigInt  @id
+  username     String?
+  firstName    String?
+  languageCode String?
+  isBanned     Boolean @default(false)
+
+  walletBalance  BigInt @default(0)
+  totalSpent     BigInt @default(0)
+  totalPurchases Int    @default(0)
+
+  referredById BigInt?
+  referralCode String   @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tickets      Ticket[]
+  orders       Order[]
+  configs      VpnConfig[]
+  walletTxs    WalletTransaction[]
+  referralsMade Referral[] @relation("Referrer")
+  referredBy    Referral?  @relation("Referee")
+
+  @@index([referralCode])
+  @@index([username])
+}
+
 model Ticket {
-  id               Int           @id @default(autoincrement())
+  id               Int          @id @default(autoincrement())
   userId           BigInt
-  user             User          @relation(fields: [userId], references: [id])
-  status           TicketStatus  @default(OPEN)
-  channelMessageId Int?          // message_id of the first post in LOG_CHANNEL
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  user             User         @relation(fields: [userId], references: [id])
+  status           TicketStatus @default(OPEN)
+  channelMessageId Int?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
   messages TicketMessage[]
 }
@@ -49,4 +117,199 @@ model TicketMessage {
   fromAdmin Boolean  @default(false)
   text      String
   createdAt DateTime @default(now())
+}
+
+model Plan {
+  id           Int      @id @default(autoincrement())
+  title        String
+  trafficGB    Int
+  durationDays Int
+  priceToman   BigInt
+  isActive     Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  orders Order[]
+
+  @@index([isActive, sortOrder])
+}
+
+model Server {
+  id             Int     @id @default(autoincrement())
+  name           String  @unique
+  flag           String?
+
+  panelUrl       String?
+  panelUsername  String?
+  panelPassword  String?
+  inboundId      Int
+
+  subDomain      String
+  subPort        Int     @default(2096)
+  subPath        String  @default("/sub/")
+
+  isActive       Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  capacity       Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  configs VpnConfig[]
+
+  @@index([isActive, sortOrder])
+}
+
+model VpnConfig {
+  id       Int    @id @default(autoincrement())
+  userId   BigInt
+  serverId Int
+
+  panelClientId Int?
+  email         String @unique
+  uuid          String @unique
+  subId         String @unique
+
+  totalGB  Int
+  expiryAt DateTime?
+
+  uploadBytes   BigInt   @default(0)
+  downloadBytes BigInt   @default(0)
+  lastSyncAt    DateTime?
+
+  notified80Pct    Boolean @default(false)
+  notified95Pct    Boolean @default(false)
+  notifiedExpiry3d Boolean @default(false)
+  notifiedExpiry1d Boolean @default(false)
+
+  status ConfigStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id])
+  server Server @relation(fields: [serverId], references: [id])
+  order  Order?
+
+  @@index([userId, status])
+  @@index([status, expiryAt])
+}
+
+model Order {
+  id       String @id @default(cuid())
+  userId   BigInt
+  planId   Int
+  serverId Int?
+
+  priceToman     BigInt
+  discountCode   String?
+  discountAmount BigInt  @default(0)
+
+  paymentMethod PaymentMethod
+  status        OrderStatus   @default(PENDING)
+
+  tonAmountNano   BigInt?
+  tonMemo         String?  @unique
+  tonRateSnapshot Decimal? @db.Decimal(20, 8)
+  rateValidUntil  DateTime?
+
+  configId Int? @unique
+
+  createdAt   DateTime  @default(now())
+  paidAt      DateTime?
+  completedAt DateTime?
+
+  user       User       @relation(fields: [userId], references: [id])
+  plan       Plan       @relation(fields: [planId], references: [id])
+  config     VpnConfig? @relation(fields: [configId], references: [id])
+  tonPayment TonPayment?
+
+  @@index([userId, status])
+  @@index([status, rateValidUntil])
+  @@index([tonMemo])
+}
+
+model WalletTransaction {
+  id          String       @id @default(cuid())
+  userId      BigInt
+  type        WalletTxType
+  amountToman BigInt
+  balanceAfter BigInt
+  description String?
+
+  orderId      String?
+  tonPaymentId String?
+  adminId      BigInt?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([type, createdAt])
+}
+
+model TonPayment {
+  id          String   @id @default(cuid())
+  txHash      String   @unique
+  fromAddress String
+  amountNano  BigInt
+  memo        String?
+  receivedAt  DateTime
+
+  status TonPaymentStatus @default(DETECTED)
+
+  matchedOrderId String?  @unique
+  matchedAt      DateTime?
+
+  createdAt DateTime @default(now())
+
+  matchedOrder Order? @relation(fields: [matchedOrderId], references: [id])
+
+  @@index([status, receivedAt])
+  @@index([memo])
+}
+
+model Referral {
+  id              Int      @id @default(autoincrement())
+  referrerId      BigInt
+  refereeId       BigInt   @unique
+  totalCommission BigInt   @default(0)
+  createdAt       DateTime @default(now())
+
+  referrer User @relation("Referrer", fields: [referrerId], references: [id])
+  referee  User @relation("Referee",  fields: [refereeId],  references: [id])
+
+  @@index([referrerId])
+}
+
+model DiscountCode {
+  id            Int      @id @default(autoincrement())
+  code          String   @unique
+  percentOff    Int
+  maxUses       Int?
+  usedCount     Int      @default(0)
+  expiresAt     DateTime?
+  onlyForUserId BigInt?
+  isActive      Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  createdBy BigInt?
+
+  @@index([code, isActive])
+}
+
+model AdminAction {
+  id           BigInt          @id @default(autoincrement())
+  adminId      BigInt
+  type         AdminActionType
+  targetUserId BigInt?
+  payload      Json
+
+  createdAt DateTime @default(now())
+
+  @@index([adminId, createdAt])
+  @@index([targetUserId, createdAt])
+  @@index([type, createdAt])
 }

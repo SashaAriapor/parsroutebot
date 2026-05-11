@@ -9,6 +9,7 @@ import { registerAdminHandlers } from './handlers/admin/menu.handler';
 import { registerAppsHandler } from './handlers/apps.handler';
 import { registerSupportHandler } from './handlers/support.handler';
 import { registerSupportReplyHandler } from './handlers/admin/support-reply.handler';
+import { registerMyServicesHandler } from './handlers/my-services.handler';
 import { supportMessageConversation, supportFollowupConversation } from './conversations/support-message.conversation';
 
 export function createBot(): Bot<BotContext> {
@@ -30,6 +31,7 @@ export function createBot(): Bot<BotContext> {
   registerSupportReplyHandler(bot);
 
   registerStartHandler(bot);
+  registerMyServicesHandler(bot);
   registerAppsHandler(bot);
   registerSupportHandler(bot);
   registerAdminHandlers(bot);
