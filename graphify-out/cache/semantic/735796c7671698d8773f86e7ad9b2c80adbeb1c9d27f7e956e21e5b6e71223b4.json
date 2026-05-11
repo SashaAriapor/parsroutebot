@@ -1,0 +1,1 @@
+{"nodes": [{"id": "migration_user_table", "label": "User Table Migration", "file_type": "code", "source_file": "prisma/migrations/20260511155714_init/migration.sql", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}

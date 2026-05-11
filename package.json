@@ -10,22 +10,26 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "lint": "eslint src --ext .ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:xui": "tsx scripts/test-xui.ts"
   },
   "dependencies": {
     "@grammyjs/conversations": "^1.2.0",
     "@prisma/client": "^5.7.0",
-    "axios": "^1.6.0",
+    "axios": "^1.16.0",
+    "axios-cookiejar-support": "^7.0.0",
     "bullmq": "^5.0.0",
     "dotenv": "^16.3.0",
     "grammy": "^1.21.0",
     "nanoid": "^3.3.7",
     "pino": "^8.17.0",
     "pino-pretty": "^10.3.0",
+    "tough-cookie": "^6.0.1",
     "zod": "^3.22.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/tough-cookie": "^4.0.5",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "eslint": "^8.0.0",

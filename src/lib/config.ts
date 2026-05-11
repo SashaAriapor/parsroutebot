@@ -36,6 +36,25 @@ const schema = z.object({
   XUI_USERNAME: z.string().min(1, 'XUI_USERNAME is required'),
   XUI_PASSWORD: z.string().min(1, 'XUI_PASSWORD is required'),
 
+  XUI_INBOUND_ID: z
+    .string()
+    .min(1, 'XUI_INBOUND_ID is required')
+    .transform((val) => parseInt(val, 10))
+    .refine((n) => !isNaN(n) && n > 0, 'XUI_INBOUND_ID must be a positive integer'),
+
+  XUI_SUB_DOMAIN: z.string().min(1, 'XUI_SUB_DOMAIN is required'),
+
+  XUI_SUB_PORT: z
+    .string()
+    .default('2096')
+    .transform((val) => parseInt(val, 10))
+    .refine((n) => !isNaN(n) && n > 0 && n <= 65535, 'XUI_SUB_PORT must be a valid port (1–65535)'),
+
+  XUI_SUB_PATH: z
+    .string()
+    .default('/sub/')
+    .refine((val) => val.startsWith('/') && val.endsWith('/'), 'XUI_SUB_PATH must start and end with /'),
+
   TON_WALLET_ADDRESS: z
     .string()
     .refine(

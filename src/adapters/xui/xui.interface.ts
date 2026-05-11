@@ -1,28 +1,28 @@
-// Implementation notes for whoever builds XuiClient:
+// Implementation notes:
 //
 // 3X-UI uses session cookies for auth. The implementation needs:
-//   - A cookie jar (e.g. tough-cookie + axios-cookiejar-support)
-//   - Auto re-login on 401/403 responses (the panel invalidates sessions)
+//   - A cookie jar (tough-cookie + axios-cookiejar-support)
+//   - Auto re-login on 401 or { success: false, msg: "Please login" } responses
 //   - The base URL from config.XUI_PANEL_URL (already has webBasePath included)
 //
-// Endpoints:
-//   POST {XUI_PANEL_URL}/login          body: form-data { username, password }
-//   GET  {XUI_PANEL_URL}/xui/inbounds   returns array of inbounds
-//   POST {XUI_PANEL_URL}/xui/inbound/addClient
-//   GET  {XUI_PANEL_URL}/xui/client/{uuid}
-//   POST {XUI_PANEL_URL}/xui/inbound/updateClient/{uuid}
-//   POST {XUI_PANEL_URL}/xui/inbound/{inboundId}/delClient/{uuid}
-//   GET  {XUI_PANEL_URL}/xui/client/getClientTraffics/{email}
-//   POST {XUI_PANEL_URL}/xui/inbound/{inboundId}/resetClientTraffic/{email}
+// API endpoints (v2.x):
+//   POST {XUI_PANEL_URL}/login                                       form-urlencoded
+//   GET  {XUI_PANEL_URL}/panel/api/inbounds/list
+//   POST {XUI_PANEL_URL}/panel/api/inbounds/addClient               JSON
+//   POST {XUI_PANEL_URL}/panel/api/inbounds/updateClient/{uuid}     JSON
+//   POST {XUI_PANEL_URL}/panel/api/inbounds/{id}/delClient/{uuid}
+//   GET  {XUI_PANEL_URL}/panel/api/inbounds/getClientTraffics/{email}
+//   POST {XUI_PANEL_URL}/panel/api/inbounds/{id}/resetClientTraffic/{email}
 
 export interface IXuiClient {
-  // Establishes a session. Called automatically; also available for manual re-auth.
+  // Establishes a session. Called automatically before first request; also available for manual re-auth.
   login(): Promise<void>;
 
-  // Returns all configured inbounds on the panel.
+  // Returns all configured inbounds on the panel (used for debugging / inbound discovery).
   listInbounds(): Promise<XuiInbound[]>;
 
-  createClient(inboundId: number, params: CreateClientParams): Promise<XuiVpnClient>;
+  // inboundId is stored in the constructor — callers do not pass it.
+  createClient(params: CreateClientParams): Promise<XuiVpnClient>;
   getClient(uuid: string): Promise<XuiVpnClient | null>;
   updateClient(uuid: string, params: Partial<CreateClientParams>): Promise<void>;
   deleteClient(uuid: string): Promise<void>;
@@ -41,14 +41,14 @@ export type CreateClientParams = {
 };
 
 export type XuiVpnClient = {
-  id: number;
+  id: number;           // internal panel client ID (0 if unavailable)
   email: string;
   uuid: string;
   enable: boolean;
-  totalGB: number;
-  expiryTime: number; // unix milliseconds
-  up: bigint;         // bytes uploaded
-  down: bigint;       // bytes downloaded
+  totalGB: number;      // GB (not bytes)
+  expiryTime: number;   // unix milliseconds
+  up: bigint;           // bytes uploaded
+  down: bigint;         // bytes downloaded
 };
 
 export type XuiInbound = {

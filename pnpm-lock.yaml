@@ -15,8 +15,11 @@ importers:
         specifier: ^5.7.0
         version: 5.22.0(prisma@5.22.0)
       axios:
-        specifier: ^1.6.0
+        specifier: ^1.16.0
         version: 1.16.0
+      axios-cookiejar-support:
+        specifier: ^7.0.0
+        version: 7.0.0(axios@1.16.0)(tough-cookie@6.0.1)
       bullmq:
         specifier: ^5.0.0
         version: 5.76.7
@@ -35,6 +38,9 @@ importers:
       pino-pretty:
         specifier: ^10.3.0
         version: 10.3.1
+      tough-cookie:
+        specifier: ^6.0.1
+        version: 6.0.1
       zod:
         specifier: ^3.22.0
         version: 3.25.76
@@ -42,6 +48,9 @@ importers:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.40
+      '@types/tough-cookie':
+        specifier: ^4.0.5
+        version: 4.0.5
       '@typescript-eslint/eslint-plugin':
         specifier: ^6.0.0
         version: 6.21.0(@typescript-eslint/parser@6.21.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
@@ -346,6 +355,9 @@ packages:
   '@types/semver@7.7.1':
     resolution: {integrity: sha512-FmgJfu+MOcQ370SD0ev7EI8TlCAfKYU+B4m5T3yXc1CiRN94g/SZPtsCkk506aUDtlMnFZvasDwHHUcZUEaYuA==}
 
+  '@types/tough-cookie@4.0.5':
+    resolution: {integrity: sha512-/Ad8+nIOV7Rl++6f1BdKxFSMgmoqEoYbHRpPcx3JEfv8VRsQe9Z4mCXeJBzxs7mbHY/XOZZuXlRNfhpVPbs6ZA==}
+
   '@typescript-eslint/eslint-plugin@6.21.0':
     resolution: {integrity: sha512-oy9+hTPCUFpngkEZUSzbf9MxI65wbKFoQYsgPdILTfbUldp5ovUuphZVe4i30emU9M/kP+T64Di0mxl7dSw3MA==}
     engines: {node: ^16.0.0 || >=18.0.0}
@@ -421,6 +433,10 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
+  agent-base@9.0.0:
+    resolution: {integrity: sha512-TQf59BsZnytt8GdJKLPfUZ54g/iaUL2OWDSFCCvMOhsHduDQxO8xC4PNeyIkVcA5KwL2phPSv0douC0fgWzmnA==}
+    engines: {node: '>= 20'}
+
   ajv@6.15.0:
     resolution: {integrity: sha512-fgFx7Hfoq60ytK2c7DhnF8jIvzYgOMxfugjLOSMHjLIPgenqa7S7oaagATUq99mV6IYvN2tRmC0wnTYX6iPbMw==}
 
@@ -449,6 +465,13 @@ packages:
   atomic-sleep@1.0.0:
     resolution: {integrity: sha512-kNOjDqAh7px0XWNI+4QbzoiR/nTkHAWNud2uvnJquD1/x5a7EQZMJT0AczqK0Qn67oY/TTQ1LbUKajZpp3I9tQ==}
     engines: {node: '>=8.0.0'}
+
+  axios-cookiejar-support@7.0.0:
+    resolution: {integrity: sha512-IpxfiGiEsHp3uj3fjtTiM2LjQGKF5Ig7gZSsVKTJ9RN6KZor17bEwU1ZgYMcrrT3qKP3pz1FdzufgHjtDxKIvg==}
+    engines: {node: '>=22.0.0'}
+    peerDependencies:
+      axios: '>=0.20.0'
+      tough-cookie: '>=4.0.0'
 
   axios@1.16.0:
     resolution: {integrity: sha512-6hp5CwvTPlN2A31g5dxnwAX0orzM7pmCRDLnZSX772mv8WDqICwFjowHuPs04Mc8deIld1+ejhtaMn5vp6b+1w==}
@@ -771,6 +794,16 @@ packages:
 
   help-me@5.0.0:
     resolution: {integrity: sha512-7xgomUX6ADmcYzFik0HzAxh/73YlKR9bmFzf51CZwR+b6YtzU2m0u49hQCqV6SvlqIqsaxovfwdvbnsw3b/zpg==}
+
+  http-cookie-agent@8.0.0:
+    resolution: {integrity: sha512-c5A2W4NXYRQR+ZOEA+nzLlWj0K7zXAG21UZaDKfZrFSlmmb1MMXBVDhQJNUNYkYJZwFi0ptlNu4r37tEM45tvg==}
+    engines: {node: '>=22.0.0'}
+    peerDependencies:
+      tough-cookie: ^4.0.0 || ^5.0.0 || ^6.0.0
+      undici: ^7.0.0 || ^8.0.0
+    peerDependenciesMeta:
+      undici:
+        optional: true
 
   ieee754@1.2.1:
     resolution: {integrity: sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA==}
@@ -1132,9 +1165,20 @@ packages:
   thread-stream@2.7.0:
     resolution: {integrity: sha512-qQiRWsU/wvNolI6tbbCKd9iKaTnCXsTwVxhhKM6nctPdujTyztjlbUkUTUymidWcMnZ5pWR0ej4a0tjsW021vw==}
 
+  tldts-core@7.0.30:
+    resolution: {integrity: sha512-uiHN8PIB1VmWyS98eZYja4xzlYqeFZVjb4OuYlJQnZAuJhMw4PbKQOKgHKhBdJR3FE/t5mUQ1Kd80++B+qhD1Q==}
+
+  tldts@7.0.30:
+    resolution: {integrity: sha512-ELrFxuqsDdHUwoh0XxDbxuLD3Wnz49Z57IFvTtvWy1hJdcMZjXLIuonjilCiWHlT2GbE4Wlv1wKVTzDFnXH1aw==}
+    hasBin: true
+
   to-regex-range@5.0.1:
     resolution: {integrity: sha512-65P7iz6X5yEr1cwcgvQxbbIw7Uk3gOy5dIdtZ4rDveLqhrdJP+Li/Hx6tyK0NEb+2GCyneCMJiGqrADCSNk8sQ==}
     engines: {node: '>=8.0'}
+
+  tough-cookie@6.0.1:
+    resolution: {integrity: sha512-LktZQb3IeoUWB9lqR5EWTHgW/VTITCXg4D21M+lvybRVdylLrRMnqaIONLVb5mav8vM19m44HIcGq4qASeu2Qw==}
+    engines: {node: '>=16'}
 
   tr46@0.0.3:
     resolution: {integrity: sha512-N3WMsuqV66lT30CrXNbEjx4GEwlow3v6rr4mCcv6prnfwhS01rkgyFdjPNBYd9br7LpXV1+Emh01fHnq2Gdgrw==}
@@ -1399,6 +1443,8 @@ snapshots:
 
   '@types/semver@7.7.1': {}
 
+  '@types/tough-cookie@4.0.5': {}
+
   '@typescript-eslint/eslint-plugin@6.21.0(@typescript-eslint/parser@6.21.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)':
     dependencies:
       '@eslint-community/regexpp': 4.12.2
@@ -1497,6 +1543,8 @@ snapshots:
 
   acorn@8.16.0: {}
 
+  agent-base@9.0.0: {}
+
   ajv@6.15.0:
     dependencies:
       fast-deep-equal: 3.1.3
@@ -1522,6 +1570,14 @@ snapshots:
   asynckit@0.4.0: {}
 
   atomic-sleep@1.0.0: {}
+
+  axios-cookiejar-support@7.0.0(axios@1.16.0)(tough-cookie@6.0.1):
+    dependencies:
+      axios: 1.16.0
+      http-cookie-agent: 8.0.0(tough-cookie@6.0.1)
+      tough-cookie: 6.0.1
+    transitivePeerDependencies:
+      - undici
 
   axios@1.16.0:
     dependencies:
@@ -1913,6 +1969,11 @@ snapshots:
 
   help-me@5.0.0: {}
 
+  http-cookie-agent@8.0.0(tough-cookie@6.0.1):
+    dependencies:
+      agent-base: 9.0.0
+      tough-cookie: 6.0.1
+
   ieee754@1.2.1: {}
 
   ignore@5.3.2: {}
@@ -2244,9 +2305,19 @@ snapshots:
     dependencies:
       real-require: 0.2.0
 
+  tldts-core@7.0.30: {}
+
+  tldts@7.0.30:
+    dependencies:
+      tldts-core: 7.0.30
+
   to-regex-range@5.0.1:
     dependencies:
       is-number: 7.0.0
+
+  tough-cookie@6.0.1:
+    dependencies:
+      tldts: 7.0.30
 
   tr46@0.0.3: {}
 
