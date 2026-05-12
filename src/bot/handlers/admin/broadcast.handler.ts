@@ -55,9 +55,9 @@ function cancelPendingKeyboard(): InlineKeyboard {
 }
 
 export function registerBroadcastHandler(bot: Bot<BotContext>): void {
-  const admin = new Composer<BotContext>(adminMiddleware);
+  const admin = new Composer<BotContext>();
 
-  admin.callbackQuery('admin:tools:broadcast', async (ctx) => {
+  admin.callbackQuery('admin:tools:broadcast', adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     await ctx.editMessageText(
       '📢 <b>ارسال پیام همگانی</b>\n\nابتدا گروه گیرنده‌ها رو انتخاب کن:',
@@ -65,7 +65,7 @@ export function registerBroadcastHandler(bot: Bot<BotContext>): void {
     );
   });
 
-  admin.callbackQuery(/^admin:bcast:seg:/, async (ctx) => {
+  admin.callbackQuery(/^admin:bcast:seg:/, adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     const segRaw = ctx.callbackQuery.data.slice('admin:bcast:seg:'.length) as BroadcastSegment;
     const count = await broadcastService.countSegment(segRaw);
@@ -83,7 +83,7 @@ export function registerBroadcastHandler(bot: Bot<BotContext>): void {
     );
   });
 
-  admin.callbackQuery('admin:bcast:confirm', async (ctx) => {
+  admin.callbackQuery('admin:bcast:confirm', adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     const adminId = ctx.from.id;
     const stashed = popBroadcastMessage(adminId);
@@ -111,7 +111,7 @@ export function registerBroadcastHandler(bot: Bot<BotContext>): void {
     );
   });
 
-  admin.callbackQuery('admin:bcast:cancel', async (ctx) => {
+  admin.callbackQuery('admin:bcast:cancel', adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     popBroadcastMessage(ctx.from.id);
     await ctx.editMessageText('❌ لغو شد.', {

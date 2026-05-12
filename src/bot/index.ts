@@ -3,6 +3,8 @@ import { conversations, createConversation } from '@grammyjs/conversations';
 import { type BotContext, type SessionData } from './types';
 import { config } from '../lib/config';
 import { logger } from '../lib/logger';
+
+// ─── TRACE ──────────────────────────────────────────────────────────────────
 import { userSyncMiddleware } from './middlewares/user-sync.middleware';
 import { registerStartHandler } from './handlers/start.handler';
 import { registerAdminHandlers } from './handlers/admin/menu.handler';
@@ -27,6 +29,20 @@ export let bot!: Bot<BotContext>;
 export function createBot(): Bot<BotContext> {
   const _bot = new Bot<BotContext>(config.BOT_TOKEN);
   bot = _bot;
+
+  // ─── TRACE: global entry point (must be FIRST bot.use) ───────────────────
+  bot.use(async (ctx, next) => {
+    logger.info({
+      from: ctx.from?.id,
+      fromUsername: ctx.from?.username,
+      text: ctx.message?.text,
+      callbackData: ctx.callbackQuery?.data,
+      updateId: ctx.update.update_id,
+      updateType: Object.keys(ctx.update).filter(k => k !== 'update_id')[0],
+    }, '🔵 UPDATE RECEIVED at bot entry');
+    await next();
+    logger.info({ from: ctx.from?.id, updateId: ctx.update.update_id }, '🟪 UPDATE finished entire chain');
+  });
 
   // Session must be registered before conversations.
   bot.use(session({ initial: (): SessionData => ({}) }));
@@ -59,7 +75,13 @@ export function createBot(): Bot<BotContext> {
   registerDiscountCreateHandler(bot);
 
   bot.catch((err) => {
-    logger.error({ err: err.error, ctx: err.ctx.update }, 'Unhandled bot error');
+    logger.error({
+      err: err.error,
+      from: err.ctx.from?.id,
+      fromUsername: err.ctx.from?.username,
+      text: err.ctx.message?.text,
+      updateId: err.ctx.update.update_id,
+    }, '🔴 [TRACE bot.catch] UNHANDLED ERROR in update');
   });
 
   return bot;

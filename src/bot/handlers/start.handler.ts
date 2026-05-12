@@ -37,6 +37,8 @@ async function tryAttachReferral(api: Api, user: User, referralCode: string): Pr
 
 export function registerStartHandler(bot: Bot<BotContext>): void {
   bot.command('start', async (ctx) => {
+    logger.info({ from: ctx.from?.id, hasDbUser: !!ctx.dbUser, text: ctx.message?.text }, '🟨 [TRACE /start] handler entered');
+
     const firstName = ctx.from?.first_name ?? 'کاربر';
 
     const payload = ctx.match?.trim();
@@ -48,8 +50,10 @@ export function registerStartHandler(bot: Bot<BotContext>): void {
       });
     }
 
+    logger.info({ from: ctx.from?.id }, '🟨 [TRACE /start] about to reply + send keyboard');
     await ctx.reply(`سلام ${firstName} 👋\nبه ربات ما خوش اومدی!`, {
       reply_markup: mainMenuKeyboard(),
     });
+    logger.info({ from: ctx.from?.id }, '🟩 [TRACE /start] handler finished');
   });
 }

@@ -50,15 +50,15 @@ async function buildSettingsText(): Promise<string> {
 }
 
 export function registerAdminSettingsHandler(bot: Bot<BotContext>): void {
-  const admin = new Composer<BotContext>(adminMiddleware);
+  const admin = new Composer<BotContext>();
 
-  admin.callbackQuery('admin:settings', async (ctx) => {
+  admin.callbackQuery('admin:settings', adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     const text = await buildSettingsText();
     await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: settingsKeyboard() });
   });
 
-  admin.callbackQuery('admin:settings:refresh-fx', async (ctx) => {
+  admin.callbackQuery('admin:settings:refresh-fx', adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery({ text: 'در حال به‌روزرسانی...' });
     try {
       await fxClient.forceRefresh();

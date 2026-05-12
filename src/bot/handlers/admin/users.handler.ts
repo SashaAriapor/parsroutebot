@@ -56,14 +56,14 @@ function formatUserProfile(user: UserProfile): string {
 }
 
 export function registerAdminUsersHandler(bot: Bot<BotContext>): void {
-  const admin = new Composer<BotContext>(adminMiddleware);
+  const admin = new Composer<BotContext>();
 
-  admin.callbackQuery('admin:users', async (ctx) => {
+  admin.callbackQuery('admin:users', adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     await ctx.editMessageText('👥 مدیریت کاربران', { reply_markup: adminUsersKeyboard() });
   });
 
-  admin.callbackQuery('admin:users:search', async (ctx) => {
+  admin.callbackQuery('admin:users:search', adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     setAdminPending(ctx.from.id, { kind: 'user-search' });
     await ctx.editMessageText(
@@ -72,7 +72,7 @@ export function registerAdminUsersHandler(bot: Bot<BotContext>): void {
     );
   });
 
-  admin.callbackQuery('admin:users:recent', async (ctx) => {
+  admin.callbackQuery('admin:users:recent', adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     const users = await adminUserService.listRecent();
     const kb = new InlineKeyboard();
@@ -84,7 +84,7 @@ export function registerAdminUsersHandler(bot: Bot<BotContext>): void {
     await ctx.editMessageText('👥 آخرین کاربران:', { reply_markup: kb });
   });
 
-  admin.callbackQuery(/^admin:user:view:/, async (ctx) => {
+  admin.callbackQuery(/^admin:user:view:/, adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     const userId = BigInt(ctx.callbackQuery.data.slice('admin:user:view:'.length));
     const user = await adminUserService.getProfile(userId);
@@ -98,7 +98,7 @@ export function registerAdminUsersHandler(bot: Bot<BotContext>): void {
     });
   });
 
-  admin.callbackQuery(/^admin:user:wallet-add:/, async (ctx) => {
+  admin.callbackQuery(/^admin:user:wallet-add:/, adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     const userId = BigInt(ctx.callbackQuery.data.slice('admin:user:wallet-add:'.length));
     setAdminPending(ctx.from.id, { kind: 'wallet-add', targetUserId: userId });
@@ -108,7 +108,7 @@ export function registerAdminUsersHandler(bot: Bot<BotContext>): void {
     );
   });
 
-  admin.callbackQuery(/^admin:user:wallet-deduct:/, async (ctx) => {
+  admin.callbackQuery(/^admin:user:wallet-deduct:/, adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     const userId = BigInt(ctx.callbackQuery.data.slice('admin:user:wallet-deduct:'.length));
     setAdminPending(ctx.from.id, { kind: 'wallet-deduct', targetUserId: userId });
@@ -119,7 +119,7 @@ export function registerAdminUsersHandler(bot: Bot<BotContext>): void {
   });
 
   // Wallet confirm — all info in callback data, reason already stashed in reasonStore
-  admin.callbackQuery(/^admin:user:wc:/, async (ctx) => {
+  admin.callbackQuery(/^admin:user:wc:/, adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     const parts = ctx.callbackQuery.data.split(':');
     // admin:user:wc:{op}:{userId}:{amount}  → indices 3,4,5
@@ -161,7 +161,7 @@ export function registerAdminUsersHandler(bot: Bot<BotContext>): void {
   });
 
   // Ban confirmation prompt (data: admin:user:ban:{userId} — userId is digits only)
-  admin.callbackQuery(/^admin:user:ban:\d/, async (ctx) => {
+  admin.callbackQuery(/^admin:user:ban:\d/, adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     const userId = ctx.callbackQuery.data.slice('admin:user:ban:'.length);
     await ctx.editMessageText(`⚠️ آیا از مسدود کردن کاربر <code>${userId}</code> مطمئنی؟`, {
@@ -171,7 +171,7 @@ export function registerAdminUsersHandler(bot: Bot<BotContext>): void {
   });
 
   // Unban confirmation prompt (data: admin:user:unban:{userId})
-  admin.callbackQuery(/^admin:user:unban:\d/, async (ctx) => {
+  admin.callbackQuery(/^admin:user:unban:\d/, adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     const userId = ctx.callbackQuery.data.slice('admin:user:unban:'.length);
     await ctx.editMessageText(
@@ -184,7 +184,7 @@ export function registerAdminUsersHandler(bot: Bot<BotContext>): void {
   });
 
   // Execute ban
-  admin.callbackQuery(/^admin:user:ban-confirm:/, async (ctx) => {
+  admin.callbackQuery(/^admin:user:ban-confirm:/, adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     const userId = BigInt(ctx.callbackQuery.data.slice('admin:user:ban-confirm:'.length));
     try {
@@ -205,7 +205,7 @@ export function registerAdminUsersHandler(bot: Bot<BotContext>): void {
   });
 
   // Execute unban
-  admin.callbackQuery(/^admin:user:unban-confirm:/, async (ctx) => {
+  admin.callbackQuery(/^admin:user:unban-confirm:/, adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     const userId = BigInt(ctx.callbackQuery.data.slice('admin:user:unban-confirm:'.length));
     try {
@@ -226,7 +226,7 @@ export function registerAdminUsersHandler(bot: Bot<BotContext>): void {
   });
 
   // Configs list
-  admin.callbackQuery(/^admin:user:configs:/, async (ctx) => {
+  admin.callbackQuery(/^admin:user:configs:/, adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     const userId = BigInt(ctx.callbackQuery.data.slice('admin:user:configs:'.length));
     const configs = await prisma.vpnConfig.findMany({
@@ -260,7 +260,7 @@ export function registerAdminUsersHandler(bot: Bot<BotContext>): void {
   });
 
   // Wallet history
-  admin.callbackQuery(/^admin:user:wh:/, async (ctx) => {
+  admin.callbackQuery(/^admin:user:wh:/, adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     const userId = BigInt(ctx.callbackQuery.data.slice('admin:user:wh:'.length));
     const txs = await adminUserService.getWalletHistory(userId);
@@ -284,7 +284,7 @@ export function registerAdminUsersHandler(bot: Bot<BotContext>): void {
   });
 
   // Cancel pending admin input
-  admin.callbackQuery('admin:cancel', async (ctx) => {
+  admin.callbackQuery('admin:cancel', adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     clearAdminPending(ctx.from.id);
     await ctx.editMessageText('پنل مدیریت 🔧', { reply_markup: adminMenuKeyboard() });

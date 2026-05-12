@@ -48,10 +48,10 @@ function cancelPendingKeyboard(): InlineKeyboard {
 }
 
 export function registerDiscountCreateHandler(bot: Bot<BotContext>): void {
-  const admin = new Composer<BotContext>(adminMiddleware);
+  const admin = new Composer<BotContext>();
 
   // ── Start: ask for code ────────────────────────────────────────────────────
-  admin.callbackQuery('admin:tools:discount-create', async (ctx) => {
+  admin.callbackQuery('admin:tools:discount-create', adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     setAdminPending(ctx.from.id, { kind: 'discount-code-input' });
     await ctx.editMessageText(
@@ -64,7 +64,7 @@ export function registerDiscountCreateHandler(bot: Bot<BotContext>): void {
   });
 
   // ── Discount code confirmation ─────────────────────────────────────────────
-  admin.callbackQuery('admin:discount:confirm', async (ctx) => {
+  admin.callbackQuery('admin:discount:confirm', adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     const adminId = ctx.from.id;
     const draft = popDiscountDraft(adminId);
@@ -115,7 +115,7 @@ export function registerDiscountCreateHandler(bot: Bot<BotContext>): void {
   });
 
   // ── List active codes ──────────────────────────────────────────────────────
-  admin.callbackQuery('admin:tools:discount-list', async (ctx) => {
+  admin.callbackQuery('admin:tools:discount-list', adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     const codes = await prisma.discountCode.findMany({
       where: {
@@ -160,7 +160,7 @@ export function registerDiscountCreateHandler(bot: Bot<BotContext>): void {
   });
 
   // ── Code detail view ───────────────────────────────────────────────────────
-  admin.callbackQuery(/^admin:discount:view:/, async (ctx) => {
+  admin.callbackQuery(/^admin:discount:view:/, adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     const id = parseInt(ctx.callbackQuery.data.slice('admin:discount:view:'.length), 10);
     const dc = await prisma.discountCode.findUnique({ where: { id } });
@@ -190,7 +190,7 @@ export function registerDiscountCreateHandler(bot: Bot<BotContext>): void {
   });
 
   // ── Deactivate confirm prompt ──────────────────────────────────────────────
-  admin.callbackQuery(/^admin:discount:deactivate:\d/, async (ctx) => {
+  admin.callbackQuery(/^admin:discount:deactivate:\d/, adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     const id = parseInt(ctx.callbackQuery.data.slice('admin:discount:deactivate:'.length), 10);
     const dc = await prisma.discountCode.findUnique({ where: { id } });
@@ -212,7 +212,7 @@ export function registerDiscountCreateHandler(bot: Bot<BotContext>): void {
   });
 
   // ── Execute deactivation ───────────────────────────────────────────────────
-  admin.callbackQuery(/^admin:discount:deactivate-confirm:/, async (ctx) => {
+  admin.callbackQuery(/^admin:discount:deactivate-confirm:/, adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     const id = parseInt(
       ctx.callbackQuery.data.slice('admin:discount:deactivate-confirm:'.length), 10,

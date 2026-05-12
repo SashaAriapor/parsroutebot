@@ -99,9 +99,9 @@ function formatTopCustomers(
 }
 
 export function registerAdminStatsHandler(bot: Bot<BotContext>): void {
-  const admin = new Composer<BotContext>(adminMiddleware);
+  const admin = new Composer<BotContext>();
 
-  admin.callbackQuery('admin:stats', async (ctx) => {
+  admin.callbackQuery('admin:stats', adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     await ctx.editMessageText('📊 <b>آمار</b>\n\nاز کدوم گزارش می‌خوای ببینی؟', {
       parse_mode: 'HTML',
@@ -109,7 +109,7 @@ export function registerAdminStatsHandler(bot: Bot<BotContext>): void {
     });
   });
 
-  admin.callbackQuery('admin:stats:overall', async (ctx) => {
+  admin.callbackQuery('admin:stats:overall', adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     const data = await adminStatsService.getOverall();
     await ctx.editMessageText(formatOverall(data), {
@@ -119,7 +119,7 @@ export function registerAdminStatsHandler(bot: Bot<BotContext>): void {
   });
 
   // Handles admin:stats:top:spent and admin:stats:top:count and plain admin:stats:top
-  admin.callbackQuery(/^admin:stats:top(:(?:spent|count))?$/, async (ctx) => {
+  admin.callbackQuery(/^admin:stats:top(:(?:spent|count))?$/, adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     const raw = ctx.callbackQuery.data;
     const sortBy: 'spent' | 'count' = raw.endsWith(':count') ? 'count' : 'spent';

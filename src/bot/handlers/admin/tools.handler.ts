@@ -52,9 +52,9 @@ function workersMenuKeyboard(): InlineKeyboard {
 }
 
 export function registerAdminToolsHandler(bot: Bot<BotContext>): void {
-  const admin = new Composer<BotContext>(adminMiddleware);
+  const admin = new Composer<BotContext>();
 
-  admin.callbackQuery('admin:tools', async (ctx) => {
+  admin.callbackQuery('admin:tools', adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     await ctx.editMessageText(
       '🛠️ <b>ابزارهای مدیریت</b>\n\nاز کدوم ابزار می‌خوای استفاده کنی؟',
@@ -62,7 +62,7 @@ export function registerAdminToolsHandler(bot: Bot<BotContext>): void {
     );
   });
 
-  admin.callbackQuery('admin:tools:workers', async (ctx) => {
+  admin.callbackQuery('admin:tools:workers', adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     await ctx.editMessageText(
       '⚙️ <b>اجرای فوری Worker</b>\n\n' +
@@ -71,7 +71,7 @@ export function registerAdminToolsHandler(bot: Bot<BotContext>): void {
     );
   });
 
-  admin.callbackQuery(/^admin:worker:run:/, async (ctx) => {
+  admin.callbackQuery(/^admin:worker:run:/, adminMiddleware, async (ctx) => {
     const name = ctx.callbackQuery.data.slice('admin:worker:run:'.length);
     const queues = await getQueueMap();
     const queue = queues[name as keyof typeof queues];
@@ -86,7 +86,7 @@ export function registerAdminToolsHandler(bot: Bot<BotContext>): void {
   });
 
   // Central cancel for broadcast/discount flows
-  admin.callbackQuery('admin:cancel-pending', async (ctx) => {
+  admin.callbackQuery('admin:cancel-pending', adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
     clearAdminPending(ctx.from.id);
     popDiscountDraft(ctx.from.id);
