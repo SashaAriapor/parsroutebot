@@ -37,6 +37,11 @@ export class FxClient implements IFxClient {
       throw new Error('FX rate unavailable and no cache');
     }
   }
+
+  async forceRefresh(): Promise<{ rate: number; fetchedAt: Date }> {
+    this.cache = null;
+    return this.getTonToIrr();
+  }
 }
 
 async function fetchTonUsd(): Promise<number> {

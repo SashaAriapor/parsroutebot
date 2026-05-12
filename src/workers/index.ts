@@ -14,7 +14,49 @@ export const redisConnection = {
 logger.debug({ host: redisConnection.host, port: redisConnection.port }, 'BullMQ connection configured');
 
 export async function startAllWorkers(): Promise<void> {
-  const { schedulePaymentPolling } = await import('./payment-poller.worker');
+  const [
+    { schedulePaymentPolling },
+    { startBroadcastWorker },
+    { startTrafficSyncWorker, scheduleTrafficSync },
+    { startExpiryNotifierWorker, scheduleExpiryNotifier },
+    { startUsageNotifierWorker, scheduleUsageNotifier },
+    { startInvoiceExpirerWorker, scheduleInvoiceExpirer },
+    { startDailySummaryWorker, scheduleDailySummary },
+  ] = await Promise.all([
+    import('./payment-poller.worker'),
+    import('./broadcast.worker'),
+    import('./traffic-sync.worker'),
+    import('./expiry-notifier.worker'),
+    import('./usage-notifier.worker'),
+    import('./invoice-expirer.worker'),
+    import('./daily-summary.worker'),
+  ]);
+
+  const workers = [
+    startBroadcastWorker(),
+    startTrafficSyncWorker(),
+    startExpiryNotifierWorker(),
+    startUsageNotifierWorker(),
+    startInvoiceExpirerWorker(),
+    startDailySummaryWorker(),
+  ];
+
   await schedulePaymentPolling();
-  logger.info('All workers started');
+  await Promise.all([
+    scheduleTrafficSync(),
+    scheduleExpiryNotifier(),
+    scheduleUsageNotifier(),
+    scheduleInvoiceExpirer(),
+    scheduleDailySummary(),
+  ]);
+
+  logger.info({ count: workers.length + 1 }, 'All workers started + scheduled');
+
+  const shutdown = async () => {
+    logger.info('Shutting down workers...');
+    await Promise.all(workers.map((w) => w.close()));
+    process.exit(0);
+  };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
