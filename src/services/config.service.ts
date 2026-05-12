@@ -10,7 +10,33 @@ export function buildSubUrl(
   server: Pick<Server, 'subDomain' | 'subPort' | 'subPath'>,
   subId: string,
 ): string {
-  return `https://${server.subDomain}:${server.subPort}${server.subPath}${subId}`;
+  const raw = server.subDomain.trim();
+
+  // Detect protocol from raw value (backward-compat: DB may store full URLs)
+  const protoMatch = raw.match(/^(https?):\/\//i);
+  const protocol = protoMatch ? protoMatch[1].toLowerCase() : 'http';
+
+  // Strip protocol then split host:port from any trailing path
+  const withoutProto = raw.replace(/^https?:\/\//i, '');
+  const hostAndPort = withoutProto.split('/')[0];
+  const [hostname, embeddedPort] = hostAndPort.split(':');
+
+  // Prefer port embedded in the domain string; fall back to server.subPort
+  const port = embeddedPort ? parseInt(embeddedPort, 10) : server.subPort;
+
+  // Normalise path
+  let path = server.subPath.trim();
+  if (!path.startsWith('/')) path = '/' + path;
+  if (!path.endsWith('/')) path = path + '/';
+
+  const omitPort =
+    (protocol === 'http' && port === 80) ||
+    (protocol === 'https' && port === 443);
+  const portPart = omitPort ? '' : `:${port}`;
+
+  const url = `${protocol}://${hostname}${portPart}${path}${subId}`;
+  logger.debug({ protocol, hostname, port, path, subId, url }, 'buildSubUrl');
+  return url;
 }
 
 export const configService = {

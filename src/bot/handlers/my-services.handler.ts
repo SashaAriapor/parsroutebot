@@ -3,8 +3,9 @@ import { type BotContext } from '../types';
 import { MENU } from '../constants';
 import { ConfigStatus } from '@prisma/client';
 import { configService, buildSubUrl } from '@/services/config.service';
-import { renewalService } from '@/services/renewal.service';
-import { getTrafficPackage, TRAFFIC_PACKAGES } from '@/services/traffic-packages';
+// TODO: re-enable when extension/traffic-add features are ready
+// import { renewalService } from '@/services/renewal.service';
+// import { getTrafficPackage, TRAFFIC_PACKAGES } from '@/services/traffic-packages';
 import { prisma } from '@/db/client';
 import { config } from '@/lib/config';
 import { logger } from '@/lib/logger';
@@ -14,11 +15,12 @@ import { generateQRBuffer } from '@/lib/qrcode';
 import {
   configListKeyboard,
   configDetailKeyboard,
-  extendPlansKeyboard,
-  extendConfirmKeyboard,
+  // TODO: re-enable when extension/traffic-add features are ready
+  // extendPlansKeyboard,
+  // extendConfirmKeyboard,
   insufficientBalanceKeyboard,
-  trafficPackagesKeyboard,
-  trafficConfirmKeyboard,
+  // trafficPackagesKeyboard,
+  // trafficConfirmKeyboard,
   backToConfigKeyboard,
 } from '../keyboards/my-services.keyboard';
 
@@ -262,258 +264,154 @@ export function registerMyServicesHandler(bot: Bot<BotContext>): void {
     }
   });
 
-  // ── svc:extend:{configId} — show plans ──────────────────────────────────
+  // TODO: re-enable when extension/traffic-add features are ready
 
-  bot.callbackQuery(/^svc:extend:(?!\w*-\w*)/, async (ctx) => {
-    const configId = parseInt(ctx.callbackQuery.data.slice('svc:extend:'.length), 10);
-    const userId = BigInt(ctx.from.id);
-    const cfg = await configService.getById(configId, userId);
+  // // ── svc:extend:{configId} — show plans ────────────────────────────────
+  // bot.callbackQuery(/^svc:extend:(?!\w*-\w*)/, async (ctx) => {
+  //   const configId = parseInt(ctx.callbackQuery.data.slice('svc:extend:'.length), 10);
+  //   const userId = BigInt(ctx.from.id);
+  //   const cfg = await configService.getById(configId, userId);
+  //   if (!cfg) { await ctx.answerCallbackQuery('❌ سرویس یافت نشد'); return; }
+  //   const plans = await prisma.plan.findMany({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } });
+  //   if (plans.length === 0) { await ctx.answerCallbackQuery('❌ در حال حاضر پلنی موجود نیست'); return; }
+  //   await ctx.editMessageText(
+  //     `➕ <b>تمدید سرویس #${cfg.id}</b>\n\nپلن مورد نظرت رو انتخاب کن. زمان به انقضای فعلی اضافه میشه:`,
+  //     { parse_mode: 'HTML', reply_markup: extendPlansKeyboard(configId, plans) },
+  //   );
+  //   await ctx.answerCallbackQuery();
+  // });
 
-    if (!cfg) {
-      await ctx.answerCallbackQuery('❌ سرویس یافت نشد');
-      return;
-    }
+  // // ── svc:extend-confirm:{configId}:{planId} ────────────────────────────
+  // bot.callbackQuery(/^svc:extend-confirm:/, async (ctx) => {
+  //   const parts = ctx.callbackQuery.data.slice('svc:extend-confirm:'.length).split(':');
+  //   const configId = parseInt(parts[0], 10);
+  //   const planId = parseInt(parts[1], 10);
+  //   const userId = BigInt(ctx.from.id);
+  //   const [user, plan] = await Promise.all([
+  //     prisma.user.findUnique({ where: { id: userId } }),
+  //     prisma.plan.findUnique({ where: { id: planId } }),
+  //   ]);
+  //   if (!user || !plan || !plan.isActive) { await ctx.answerCallbackQuery('❌ پلن یافت نشد'); return; }
+  //   const after = user.walletBalance - plan.priceToman;
+  //   if (after < 0n) {
+  //     const shortage = plan.priceToman - user.walletBalance;
+  //     await ctx.editMessageText(
+  //       `❌ <b>موجودی کافی نیست</b>\n\nموجودی کیف پول: ${formatToman(user.walletBalance)}\nمبلغ مورد نیاز: ${formatToman(plan.priceToman)}\nکمبود: ${formatToman(shortage)}\n\nاول کیف پولت رو شارژ کن.`,
+  //       { parse_mode: 'HTML', reply_markup: insufficientBalanceKeyboard() },
+  //     );
+  //     await ctx.answerCallbackQuery();
+  //     return;
+  //   }
+  //   await ctx.editMessageText(
+  //     `✅ <b>تأیید تمدید سرویس #${configId}</b>\n\nپلن انتخابی: ${plan.title} (${formatToman(plan.priceToman)})\nموجودی کیف پول: ${formatToman(user.walletBalance)}\nبعد از خرید: ${formatToman(after)}\n\nتأیید می‌کنی؟`,
+  //     { parse_mode: 'HTML', reply_markup: extendConfirmKeyboard(configId, planId) },
+  //   );
+  //   await ctx.answerCallbackQuery();
+  // });
 
-    const plans = await prisma.plan.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: 'asc' },
-    });
+  // // ── svc:extend-do:{configId}:{planId} ─────────────────────────────────
+  // bot.callbackQuery(/^svc:extend-do:/, async (ctx) => {
+  //   const parts = ctx.callbackQuery.data.slice('svc:extend-do:'.length).split(':');
+  //   const configId = parseInt(parts[0], 10);
+  //   const planId = parseInt(parts[1], 10);
+  //   const userId = BigInt(ctx.from.id);
+  //   await ctx.answerCallbackQuery({ text: '⏳ در حال پردازش...' });
+  //   const result = await renewalService.extend({ userId, configId, planId });
+  //   if (!result.ok) {
+  //     const msgMap: Record<string, string> = {
+  //       NOT_FOUND: '❌ سرویس یا پلن یافت نشد.',
+  //       INSUFFICIENT_BALANCE: '❌ موجودی کافی نیست. لطفاً کیف پولت رو شارژ کن.',
+  //       PLAN_INACTIVE: '❌ این پلن دیگه فعال نیست.',
+  //       PANEL_ERROR: '❌ خطا در ارتباط با سرور. لطفاً دوباره امتحان کن.',
+  //     };
+  //     await ctx.editMessageText(msgMap[result.reason] ?? '❌ خطای ناشناخته.', { reply_markup: backToConfigKeyboard(configId) });
+  //     return;
+  //   }
+  //   const plan = await prisma.plan.findUnique({ where: { id: planId } });
+  //   await ctx.editMessageText(
+  //     `✅ <b>تمدید با موفقیت انجام شد</b>\n\n📅 تاریخ پایان جدید: ${formatDateIR(result.newExpiry)}\n💰 موجودی فعلی: ${formatToman(result.newBalance)}`,
+  //     { parse_mode: 'HTML', reply_markup: backToConfigKeyboard(configId) },
+  //   );
+  //   await postSaleToChannel(ctx, {
+  //     configId,
+  //     type: `تمدید ${plan?.durationDays ?? '?'} روزه`,
+  //     amount: plan?.priceToman ?? 0n,
+  //     newBalance: result.newBalance,
+  //     detail: `📅 انقضای جدید: ${formatTehranTime(result.newExpiry)}`,
+  //   });
+  // });
 
-    if (plans.length === 0) {
-      await ctx.answerCallbackQuery('❌ در حال حاضر پلنی موجود نیست');
-      return;
-    }
+  // // ── svc:traffic:{configId} — show packages ────────────────────────────
+  // bot.callbackQuery(/^svc:traffic:(?!\w*-\w*)/, async (ctx) => {
+  //   const configId = parseInt(ctx.callbackQuery.data.slice('svc:traffic:'.length), 10);
+  //   const userId = BigInt(ctx.from.id);
+  //   const cfg = await configService.getById(configId, userId);
+  //   if (!cfg) { await ctx.answerCallbackQuery('❌ سرویس یافت نشد'); return; }
+  //   if (cfg.totalGB === 0) { await ctx.answerCallbackQuery('❌ سرویس نامحدود نیاز به افزایش حجم ندارد'); return; }
+  //   await ctx.editMessageText(
+  //     `📦 <b>افزایش حجم سرویس #${cfg.id}</b>\n\nحجم فعلی: ${formatGB(cfg.totalGB)}\n\nپکیج مورد نظرت رو انتخاب کن:`,
+  //     { parse_mode: 'HTML', reply_markup: trafficPackagesKeyboard(configId) },
+  //   );
+  //   await ctx.answerCallbackQuery();
+  // });
 
-    await ctx.editMessageText(
-      `➕ <b>تمدید سرویس #${cfg.id}</b>\n\n` +
-        'پلن مورد نظرت رو انتخاب کن. زمان به انقضای فعلی اضافه میشه:',
-      {
-        parse_mode: 'HTML',
-        reply_markup: extendPlansKeyboard(configId, plans),
-      },
-    );
-    await ctx.answerCallbackQuery();
-  });
+  // // ── svc:traffic-confirm:{configId}:{pkgId} ────────────────────────────
+  // bot.callbackQuery(/^svc:traffic-confirm:/, async (ctx) => {
+  //   const parts = ctx.callbackQuery.data.slice('svc:traffic-confirm:'.length).split(':');
+  //   const configId = parseInt(parts[0], 10);
+  //   const pkgId = parseInt(parts[1], 10);
+  //   const userId = BigInt(ctx.from.id);
+  //   const pkg = getTrafficPackage(pkgId);
+  //   const user = await prisma.user.findUnique({ where: { id: userId } });
+  //   if (!pkg || !user) { await ctx.answerCallbackQuery('❌ پکیج یافت نشد'); return; }
+  //   const after = user.walletBalance - pkg.priceToman;
+  //   if (after < 0n) {
+  //     const shortage = pkg.priceToman - user.walletBalance;
+  //     await ctx.editMessageText(
+  //       `❌ <b>موجودی کافی نیست</b>\n\nموجودی کیف پول: ${formatToman(user.walletBalance)}\nمبلغ مورد نیاز: ${formatToman(pkg.priceToman)}\nکمبود: ${formatToman(shortage)}\n\nاول کیف پولت رو شارژ کن.`,
+  //       { parse_mode: 'HTML', reply_markup: insufficientBalanceKeyboard() },
+  //     );
+  //     await ctx.answerCallbackQuery();
+  //     return;
+  //   }
+  //   await ctx.editMessageText(
+  //     `✅ <b>تأیید افزایش حجم سرویس #${configId}</b>\n\nپکیج انتخابی: +${pkg.gb} گیگ (${formatToman(pkg.priceToman)})\nموجودی کیف پول: ${formatToman(user.walletBalance)}\nبعد از خرید: ${formatToman(after)}\n\nتأیید می‌کنی؟`,
+  //     { parse_mode: 'HTML', reply_markup: trafficConfirmKeyboard(configId, pkgId) },
+  //   );
+  //   await ctx.answerCallbackQuery();
+  // });
 
-  // ── svc:extend-confirm:{configId}:{planId} ───────────────────────────────
-
-  bot.callbackQuery(/^svc:extend-confirm:/, async (ctx) => {
-    const parts = ctx.callbackQuery.data.slice('svc:extend-confirm:'.length).split(':');
-    const configId = parseInt(parts[0], 10);
-    const planId = parseInt(parts[1], 10);
-    const userId = BigInt(ctx.from.id);
-
-    const [user, plan] = await Promise.all([
-      prisma.user.findUnique({ where: { id: userId } }),
-      prisma.plan.findUnique({ where: { id: planId } }),
-    ]);
-
-    if (!user || !plan || !plan.isActive) {
-      await ctx.answerCallbackQuery('❌ پلن یافت نشد');
-      return;
-    }
-
-    const after = user.walletBalance - plan.priceToman;
-
-    if (after < 0n) {
-      const shortage = plan.priceToman - user.walletBalance;
-      await ctx.editMessageText(
-        `❌ <b>موجودی کافی نیست</b>\n\n` +
-          `موجودی کیف پول: ${formatToman(user.walletBalance)}\n` +
-          `مبلغ مورد نیاز: ${formatToman(plan.priceToman)}\n` +
-          `کمبود: ${formatToman(shortage)}\n\n` +
-          'اول کیف پولت رو شارژ کن.',
-        {
-          parse_mode: 'HTML',
-          reply_markup: insufficientBalanceKeyboard(),
-        },
-      );
-      await ctx.answerCallbackQuery();
-      return;
-    }
-
-    await ctx.editMessageText(
-      `✅ <b>تأیید تمدید سرویس #${configId}</b>\n\n` +
-        `پلن انتخابی: ${plan.title} (${formatToman(plan.priceToman)})\n` +
-        `موجودی کیف پول: ${formatToman(user.walletBalance)}\n` +
-        `بعد از خرید: ${formatToman(after)}\n\n` +
-        'تأیید می‌کنی؟',
-      {
-        parse_mode: 'HTML',
-        reply_markup: extendConfirmKeyboard(configId, planId),
-      },
-    );
-    await ctx.answerCallbackQuery();
-  });
-
-  // ── svc:extend-do:{configId}:{planId} ────────────────────────────────────
-
-  bot.callbackQuery(/^svc:extend-do:/, async (ctx) => {
-    const parts = ctx.callbackQuery.data.slice('svc:extend-do:'.length).split(':');
-    const configId = parseInt(parts[0], 10);
-    const planId = parseInt(parts[1], 10);
-    const userId = BigInt(ctx.from.id);
-
-    await ctx.answerCallbackQuery({ text: '⏳ در حال پردازش...' });
-
-    const result = await renewalService.extend({ userId, configId, planId });
-
-    if (!result.ok) {
-      const msgMap: Record<string, string> = {
-        NOT_FOUND: '❌ سرویس یا پلن یافت نشد.',
-        INSUFFICIENT_BALANCE: '❌ موجودی کافی نیست. لطفاً کیف پولت رو شارژ کن.',
-        PLAN_INACTIVE: '❌ این پلن دیگه فعال نیست.',
-        PANEL_ERROR: '❌ خطا در ارتباط با سرور. لطفاً دوباره امتحان کن.',
-      };
-      await ctx.editMessageText(msgMap[result.reason] ?? '❌ خطای ناشناخته.', {
-        reply_markup: backToConfigKeyboard(configId),
-      });
-      return;
-    }
-
-    const plan = await prisma.plan.findUnique({ where: { id: planId } });
-
-    await ctx.editMessageText(
-      `✅ <b>تمدید با موفقیت انجام شد</b>\n\n` +
-        `📅 تاریخ پایان جدید: ${formatDateIR(result.newExpiry)}\n` +
-        `💰 موجودی فعلی: ${formatToman(result.newBalance)}`,
-      {
-        parse_mode: 'HTML',
-        reply_markup: backToConfigKeyboard(configId),
-      },
-    );
-
-    await postSaleToChannel(ctx, {
-      configId,
-      type: `تمدید ${plan?.durationDays ?? '?'} روزه`,
-      amount: plan?.priceToman ?? 0n,
-      newBalance: result.newBalance,
-      detail: `📅 انقضای جدید: ${formatTehranTime(result.newExpiry)}`,
-    });
-  });
-
-  // ── svc:traffic:{configId} — show packages ───────────────────────────────
-
-  bot.callbackQuery(/^svc:traffic:(?!\w*-\w*)/, async (ctx) => {
-    const configId = parseInt(ctx.callbackQuery.data.slice('svc:traffic:'.length), 10);
-    const userId = BigInt(ctx.from.id);
-    const cfg = await configService.getById(configId, userId);
-
-    if (!cfg) {
-      await ctx.answerCallbackQuery('❌ سرویس یافت نشد');
-      return;
-    }
-    if (cfg.totalGB === 0) {
-      await ctx.answerCallbackQuery('❌ سرویس نامحدود نیاز به افزایش حجم ندارد');
-      return;
-    }
-
-    await ctx.editMessageText(
-      `📦 <b>افزایش حجم سرویس #${cfg.id}</b>\n\n` +
-        `حجم فعلی: ${formatGB(cfg.totalGB)}\n\n` +
-        'پکیج مورد نظرت رو انتخاب کن:',
-      {
-        parse_mode: 'HTML',
-        reply_markup: trafficPackagesKeyboard(configId),
-      },
-    );
-    await ctx.answerCallbackQuery();
-  });
-
-  // ── svc:traffic-confirm:{configId}:{pkgId} ───────────────────────────────
-
-  bot.callbackQuery(/^svc:traffic-confirm:/, async (ctx) => {
-    const parts = ctx.callbackQuery.data.slice('svc:traffic-confirm:'.length).split(':');
-    const configId = parseInt(parts[0], 10);
-    const pkgId = parseInt(parts[1], 10);
-    const userId = BigInt(ctx.from.id);
-
-    const pkg = getTrafficPackage(pkgId);
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-
-    if (!pkg || !user) {
-      await ctx.answerCallbackQuery('❌ پکیج یافت نشد');
-      return;
-    }
-
-    const after = user.walletBalance - pkg.priceToman;
-
-    if (after < 0n) {
-      const shortage = pkg.priceToman - user.walletBalance;
-      await ctx.editMessageText(
-        `❌ <b>موجودی کافی نیست</b>\n\n` +
-          `موجودی کیف پول: ${formatToman(user.walletBalance)}\n` +
-          `مبلغ مورد نیاز: ${formatToman(pkg.priceToman)}\n` +
-          `کمبود: ${formatToman(shortage)}\n\n` +
-          'اول کیف پولت رو شارژ کن.',
-        {
-          parse_mode: 'HTML',
-          reply_markup: insufficientBalanceKeyboard(),
-        },
-      );
-      await ctx.answerCallbackQuery();
-      return;
-    }
-
-    await ctx.editMessageText(
-      `✅ <b>تأیید افزایش حجم سرویس #${configId}</b>\n\n` +
-        `پکیج انتخابی: +${pkg.gb} گیگ (${formatToman(pkg.priceToman)})\n` +
-        `موجودی کیف پول: ${formatToman(user.walletBalance)}\n` +
-        `بعد از خرید: ${formatToman(after)}\n\n` +
-        'تأیید می‌کنی؟',
-      {
-        parse_mode: 'HTML',
-        reply_markup: trafficConfirmKeyboard(configId, pkgId),
-      },
-    );
-    await ctx.answerCallbackQuery();
-  });
-
-  // ── svc:traffic-do:{configId}:{pkgId} ────────────────────────────────────
-
-  bot.callbackQuery(/^svc:traffic-do:/, async (ctx) => {
-    const parts = ctx.callbackQuery.data.slice('svc:traffic-do:'.length).split(':');
-    const configId = parseInt(parts[0], 10);
-    const pkgId = parseInt(parts[1], 10);
-    const userId = BigInt(ctx.from.id);
-
-    await ctx.answerCallbackQuery({ text: '⏳ در حال پردازش...' });
-
-    const result = await renewalService.addTraffic({ userId, configId, packageId: pkgId });
-
-    if (!result.ok) {
-      const msgMap: Record<string, string> = {
-        NOT_FOUND: '❌ سرویس یا پکیج یافت نشد.',
-        INSUFFICIENT_BALANCE: '❌ موجودی کافی نیست. لطفاً کیف پولت رو شارژ کن.',
-        UNLIMITED: '❌ سرویس نامحدود نیاز به افزایش حجم ندارد.',
-        PANEL_ERROR: '❌ خطا در ارتباط با سرور. لطفاً دوباره امتحان کن.',
-      };
-      await ctx.editMessageText(msgMap[result.reason] ?? '❌ خطای ناشناخته.', {
-        reply_markup: backToConfigKeyboard(configId),
-      });
-      return;
-    }
-
-    const pkg = getTrafficPackage(pkgId);
-
-    await ctx.editMessageText(
-      `✅ <b>افزایش حجم با موفقیت انجام شد</b>\n\n` +
-        `📦 حجم جدید: ${formatGB(result.newTotalGB)}\n` +
-        `💰 موجودی فعلی: ${formatToman(result.newBalance)}`,
-      {
-        parse_mode: 'HTML',
-        reply_markup: backToConfigKeyboard(configId),
-      },
-    );
-
-    await postSaleToChannel(ctx, {
-      configId,
-      type: `افزایش حجم +${pkg?.gb ?? '?'} گیگ`,
-      amount: pkg?.priceToman ?? 0n,
-      newBalance: result.newBalance,
-      detail: `📦 حجم جدید: ${formatGB(result.newTotalGB)}`,
-    });
-  });
+  // // ── svc:traffic-do:{configId}:{pkgId} ─────────────────────────────────
+  // bot.callbackQuery(/^svc:traffic-do:/, async (ctx) => {
+  //   const parts = ctx.callbackQuery.data.slice('svc:traffic-do:'.length).split(':');
+  //   const configId = parseInt(parts[0], 10);
+  //   const pkgId = parseInt(parts[1], 10);
+  //   const userId = BigInt(ctx.from.id);
+  //   await ctx.answerCallbackQuery({ text: '⏳ در حال پردازش...' });
+  //   const result = await renewalService.addTraffic({ userId, configId, packageId: pkgId });
+  //   if (!result.ok) {
+  //     const msgMap: Record<string, string> = {
+  //       NOT_FOUND: '❌ سرویس یا پکیج یافت نشد.',
+  //       INSUFFICIENT_BALANCE: '❌ موجودی کافی نیست. لطفاً کیف پولت رو شارژ کن.',
+  //       UNLIMITED: '❌ سرویس نامحدود نیاز به افزایش حجم ندارد.',
+  //       PANEL_ERROR: '❌ خطا در ارتباط با سرور. لطفاً دوباره امتحان کن.',
+  //     };
+  //     await ctx.editMessageText(msgMap[result.reason] ?? '❌ خطای ناشناخته.', { reply_markup: backToConfigKeyboard(configId) });
+  //     return;
+  //   }
+  //   const pkg = getTrafficPackage(pkgId);
+  //   await ctx.editMessageText(
+  //     `✅ <b>افزایش حجم با موفقیت انجام شد</b>\n\n📦 حجم جدید: ${formatGB(result.newTotalGB)}\n💰 موجودی فعلی: ${formatToman(result.newBalance)}`,
+  //     { parse_mode: 'HTML', reply_markup: backToConfigKeyboard(configId) },
+  //   );
+  //   await postSaleToChannel(ctx, {
+  //     configId,
+  //     type: `افزایش حجم +${pkg?.gb ?? '?'} گیگ`,
+  //     amount: pkg?.priceToman ?? 0n,
+  //     newBalance: result.newBalance,
+  //     detail: `📦 حجم جدید: ${formatGB(result.newTotalGB)}`,
+  //   });
+  // });
 
   // ── svc:support:{configId} ────────────────────────────────────────────────
 

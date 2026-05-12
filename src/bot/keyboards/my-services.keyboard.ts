@@ -44,11 +44,12 @@ export function configDetailKeyboard(
         .text('🔳 QR کد', `svc:qr:${configId}`)
         .row();
     }
-    kb.text('➕ تمدید', `svc:extend:${configId}`);
-    if (!isUnlimited && status === ConfigStatus.ACTIVE) {
-      kb.text('📦 افزایش حجم', `svc:traffic:${configId}`);
-    }
-    kb.row();
+    // TODO: re-enable when extension/traffic-add features are ready
+    // kb.text('➕ تمدید', `svc:extend:${configId}`);
+    // if (!isUnlimited && status === ConfigStatus.ACTIVE) {
+    //   kb.text('📦 افزایش حجم', `svc:traffic:${configId}`);
+    // }
+    // kb.row();
   }
 
   kb.text('💬 پشتیبانی', `svc:support:${configId}`).row();
