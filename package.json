@@ -12,7 +12,8 @@
     "db:seed": "prisma db seed",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
-    "test:xui": "tsx scripts/test-xui.ts"
+    "test:xui": "tsx scripts/test-xui.ts",
+    "test:ton": "tsx scripts/test-ton.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -20,11 +21,14 @@
   "dependencies": {
     "@grammyjs/conversations": "^1.2.0",
     "@prisma/client": "^5.7.0",
+    "@ton/core": "^0.63.1",
+    "@ton/ton": "^16.2.4",
     "axios": "^1.16.0",
     "axios-cookiejar-support": "^7.0.0",
     "bullmq": "^5.0.0",
     "dotenv": "^16.3.0",
     "grammy": "^1.21.0",
+    "ioredis": "^5.10.1",
     "nanoid": "^3.3.7",
     "pino": "^8.17.0",
     "pino-pretty": "^10.3.0",

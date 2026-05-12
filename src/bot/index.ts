@@ -14,8 +14,12 @@ import { registerBuyHandler } from './handlers/buy.handler';
 import { registerInviteHandler } from './handlers/invite.handler';
 import { supportMessageConversation, supportFollowupConversation } from './conversations/support-message.conversation';
 
+// Module-level bot singleton — set by createBot(), used by services via dynamic import
+export let bot!: Bot<BotContext>;
+
 export function createBot(): Bot<BotContext> {
-  const bot = new Bot<BotContext>(config.BOT_TOKEN);
+  const _bot = new Bot<BotContext>(config.BOT_TOKEN);
+  bot = _bot;
 
   // Session must be registered before conversations.
   bot.use(session({ initial: (): SessionData => ({}) }));

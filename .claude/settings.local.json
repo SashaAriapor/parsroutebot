@@ -9,7 +9,9 @@
       "Bash(pnpm db:seed *)",
       "Bash(node *)",
       "Bash(pnpm add *)",
-      "Bash(pnpm prisma *)"
+      "Bash(pnpm prisma *)",
+      "Bash(pnpm test:ton *)",
+      "Bash(curl -s --max-time 8 \"https://api.wallex.ir/v1/depth?symbol=USDTTMN\")"
     ]
   }
 }
