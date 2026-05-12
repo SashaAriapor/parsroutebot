@@ -19,6 +19,7 @@ import {
   walletConfirmKeyboard,
   insufficientBuyKeyboard,
   successKeyboard,
+  buyTonInvoiceKeyboard,
 } from '../keyboards/buy.keyboard';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -370,9 +371,121 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
       return;
     }
 
-    // ── TON (coming soon) ────────────────────────────────────────────────────
+    // ── TON payment ──────────────────────────────────────────────────────────
     if (data === 'buy:pay:ton') {
-      await ctx.answerCallbackQuery({ text: '🚧 پرداخت TON به‌زودی فعال میشه. فعلاً از کیف پول استفاده کن.' });
+      const state = getBuyState(userId);
+      if (!state?.trafficGB || !state.serverId || state.finalPriceToman == null) {
+        clearBuyState(userId);
+        await ctx.editMessageText('❌ اطلاعات سفارش منقضی شده. لطفاً دوباره شروع کن.');
+        await ctx.answerCallbackQuery();
+        return;
+      }
+
+      await ctx.answerCallbackQuery({ text: '⏳ در حال محاسبه...' });
+
+      const result = await buyService.createPendingTonOrder({
+        userId: BigInt(userId),
+        serverId: state.serverId,
+        trafficGB: state.trafficGB!,
+        durationDays: state.durationDays!,
+        pricePerGB: state.pricePerGB!,
+        discountCode: state.discountCode,
+        finalPriceToman: state.finalPriceToman,
+      });
+
+      if (!result.ok) {
+        const msgMap: Record<string, string> = {
+          INVALID_DISCOUNT: `❌ کد تخفیف منقضی شده: ${result.reason}`,
+          SERVER_INACTIVE: '❌ این سرور دیگه فعال نیست.',
+          UNKNOWN: '❌ خطا در ثبت سفارش.',
+        };
+        await ctx.editMessageText(msgMap[result.code] ?? '❌ خطا در ثبت سفارش.');
+        clearBuyState(userId);
+        return;
+      }
+
+      clearBuyState(userId);
+
+      const nanoTonDisplay = (Number(result.tonAmountNano) / 1e9).toFixed(6);
+      const server = await prisma.server.findUnique({ where: { id: state.serverId! } });
+
+      const text = [
+        '🪙 <b>پرداخت با TON</b>',
+        '',
+        `📦 ${formatGB(state.trafficGB!)} — ${state.durationDays!} روز`,
+        `📍 ${server?.flag ?? ''}${escapeHtml(server?.name ?? '—')}`,
+        `💰 معادل: ${formatToman(state.finalPriceToman!)}`,
+        '',
+        `🪙 مبلغ TON: <b>${nanoTonDisplay} TON</b>`,
+        `⏱ اعتبار نرخ: ${formatDateIR(result.expiresAt)}`,
+        '',
+        '📬 آدرس کیف پول:',
+        `<code>${result.tonAddress}</code>`,
+        '',
+        '📝 موضوع پرداخت (حتماً وارد کن!):',
+        `<code>${result.tonMemo}</code>`,
+        '',
+        '⚠️ موضوع پرداخت رو دقیقاً وارد کن.',
+        'بعد از تأیید شبکه، سرویست به‌صورت خودکار فعال میشه.',
+      ].join('\n');
+
+      await ctx.editMessageText(text, {
+        parse_mode: 'HTML',
+        reply_markup: buyTonInvoiceKeyboard(result.orderId),
+      });
+      return;
+    }
+
+    // ── TON QR code ──────────────────────────────────────────────────────────
+    if (data.startsWith('buy:ton-qr:')) {
+      const orderId = data.slice('buy:ton-qr:'.length);
+      const order = await prisma.order.findUnique({ where: { id: orderId } });
+
+      if (!order || !order.tonMemo || !order.tonAmountNano) {
+        await ctx.answerCallbackQuery({ text: '❌ اطلاعات سفارش یافت نشد', show_alert: true });
+        return;
+      }
+
+      const deepLink = `ton://transfer/${config.TON_WALLET_ADDRESS}?amount=${order.tonAmountNano}&text=${encodeURIComponent(order.tonMemo)}`;
+
+      try {
+        const buffer = await generateQRBuffer(deepLink);
+        await ctx.replyWithPhoto(new InputFile(buffer, 'qr.png'), {
+          caption: `🔳 این QR رو در Tonkeeper یا کیف TON خودت اسکن کن.\n\n📝 موضوع: <code>${order.tonMemo}</code>`,
+          parse_mode: 'HTML',
+        });
+        await ctx.answerCallbackQuery();
+      } catch (err) {
+        logger.error({ err }, 'Failed to generate buy TON QR');
+        await ctx.answerCallbackQuery({ text: '❌ خطا در ساخت QR', show_alert: true });
+      }
+      return;
+    }
+
+    // ── TON paid acknowledgement ──────────────────────────────────────────────
+    if (data === 'buy:ton-paid') {
+      await ctx.answerCallbackQuery({
+        text: '✅ پرداخت پیگیری میشه. بعد از تأیید شبکه، سرویست فعال میشه.',
+        show_alert: true,
+      });
+      return;
+    }
+
+    // ── Cancel pending TON order ──────────────────────────────────────────────
+    if (data.startsWith('buy:cancel-pending:')) {
+      const orderId = data.slice('buy:cancel-pending:'.length);
+
+      try {
+        await prisma.order.update({
+          where: { id: orderId, status: 'PENDING' },
+          data: { status: 'CANCELLED' },
+        });
+      } catch (err) {
+        logger.warn({ err, orderId }, 'Failed to cancel pending TON order (may already be processed)');
+      }
+
+      await ctx.editMessageText('❌ سفارش TON لغو شد. اگه پرداخت انجام دادی، به پشتیبانی اطلاع بده.');
+      await ctx.answerCallbackQuery();
       return;
     }
 

@@ -4,11 +4,13 @@ import { config } from './lib/config';
 import { logger } from './lib/logger';
 import { createBot } from './bot/index';
 import { prisma } from './db/client';
+import { startAllWorkers } from './workers/index';
 
 async function main() {
   logger.info({ env: config.NODE_ENV }, 'Starting bot');
 
   const bot = createBot();
+  await startAllWorkers();
 
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutting down gracefully...');

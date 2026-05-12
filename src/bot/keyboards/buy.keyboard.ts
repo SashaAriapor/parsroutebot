@@ -34,9 +34,16 @@ export function discountScreenKeyboard(): InlineKeyboard {
 export function summaryKeyboard(): InlineKeyboard {
   return new InlineKeyboard()
     .text('💰 پرداخت از کیف پول', 'buy:pay:wallet').row()
-    .text('🪙 پرداخت با TON (به‌زودی)', 'buy:pay:ton').row()
+    .text('🪙 پرداخت با TON', 'buy:pay:ton').row()
     .text('⬅️ بازگشت', 'buy:back-to-discount').row()
     .text('❌ انصراف', 'buy:cancel');
+}
+
+export function buyTonInvoiceKeyboard(orderId: string): InlineKeyboard {
+  return new InlineKeyboard()
+    .text('🔳 کد QR', `buy:ton-qr:${orderId}`).row()
+    .text('✅ پرداخت کردم', 'buy:ton-paid').row()
+    .text('❌ لغو سفارش', `buy:cancel-pending:${orderId}`);
 }
 
 export function walletConfirmKeyboard(): InlineKeyboard {

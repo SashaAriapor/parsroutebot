@@ -24,9 +24,14 @@ export function generateSubId(): string {
 
 /**
  * Build the subscription URL that users paste into V2rayNG / Hiddify / etc.
- * Format: https://{XUI_SUB_DOMAIN}:{XUI_SUB_PORT}{XUI_SUB_PATH}{subId}
+ * Example: buildSubscriptionUrl('ZdyNgKq1Bc2X1abi')
+ * → "http://p.swshao.ir:2095/sub/ZdyNgKq1Bc2X1abi"
  */
 export function buildSubscriptionUrl(subId: string): string {
-  const { XUI_SUB_DOMAIN, XUI_SUB_PORT, XUI_SUB_PATH } = config;
-  return `https://${XUI_SUB_DOMAIN}:${XUI_SUB_PORT}${XUI_SUB_PATH}${subId}`;
+  const { XUI_SUB_PROTOCOL, XUI_SUB_DOMAIN, XUI_SUB_PORT, XUI_SUB_PATH } = config;
+  const isDefaultPort =
+    (XUI_SUB_PROTOCOL === 'http' && XUI_SUB_PORT === 80) ||
+    (XUI_SUB_PROTOCOL === 'https' && XUI_SUB_PORT === 443);
+  const portPart = isDefaultPort ? '' : `:${XUI_SUB_PORT}`;
+  return `${XUI_SUB_PROTOCOL}://${XUI_SUB_DOMAIN}${portPart}${XUI_SUB_PATH}${subId}`;
 }

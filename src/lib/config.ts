@@ -42,7 +42,21 @@ const schema = z.object({
     .transform((val) => parseInt(val, 10))
     .refine((n) => !isNaN(n) && n > 0, 'XUI_INBOUND_ID must be a positive integer'),
 
-  XUI_SUB_DOMAIN: z.string().min(1, 'XUI_SUB_DOMAIN is required'),
+  XUI_SUB_PROTOCOL: z
+    .enum(['http', 'https'])
+    .default('https'),
+
+  XUI_SUB_DOMAIN: z
+    .string()
+    .min(1, 'XUI_SUB_DOMAIN is required')
+    .transform((v) => {
+      // Strip protocol prefix if user accidentally pasted a full URL
+      let s = v.trim().replace(/^https?:\/\//i, '');
+      s = s.split('/')[0]; // drop any path portion
+      s = s.split(':')[0]; // drop embedded port (we have XUI_SUB_PORT)
+      return s;
+    })
+    .pipe(z.string().min(1, 'XUI_SUB_DOMAIN must not be empty after sanitization')),
 
   XUI_SUB_PORT: z
     .string()
@@ -53,7 +67,12 @@ const schema = z.object({
   XUI_SUB_PATH: z
     .string()
     .default('/sub/')
-    .refine((val) => val.startsWith('/') && val.endsWith('/'), 'XUI_SUB_PATH must start and end with /'),
+    .transform((v) => {
+      let s = v.trim();
+      if (!s.startsWith('/')) s = '/' + s;
+      if (!s.endsWith('/')) s = s + '/';
+      return s;
+    }),
 
   REFERRAL_COMMISSION_PERCENT: z
     .string()

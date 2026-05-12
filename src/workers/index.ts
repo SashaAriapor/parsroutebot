@@ -13,7 +13,8 @@ export const redisConnection = {
 
 logger.debug({ host: redisConnection.host, port: redisConnection.port }, 'BullMQ connection configured');
 
-// Register queues and workers here as they are implemented.
-// Example:
-//   import { Queue } from 'bullmq';
-//   export const paymentQueue = new Queue('payments', { connection: redisConnection });
+export async function startAllWorkers(): Promise<void> {
+  const { schedulePaymentPolling } = await import('./payment-poller.worker');
+  await schedulePaymentPolling();
+  logger.info('All workers started');
+}

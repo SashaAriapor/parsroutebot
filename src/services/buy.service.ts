@@ -5,6 +5,8 @@ import { xuiClient, generateClientEmail, generateSubId } from '@/adapters/xui';
 import { buildSubUrl } from './config.service';
 import { discountService } from './discount.service';
 import { referralService } from './referral.service';
+import { tonInvoiceService } from './ton-invoice.service';
+import { config } from '@/lib/config';
 import { logger } from '@/lib/logger';
 
 type ExecuteParams = {
@@ -35,7 +37,74 @@ type ExecuteResult =
       code: 'INSUFFICIENT_BALANCE' | 'PANEL_FAILED' | 'SERVER_INACTIVE' | 'INVALID_DISCOUNT' | 'UNKNOWN';
     };
 
+type PendingTonOrderParams = {
+  userId: bigint;
+  serverId: number;
+  trafficGB: number;
+  durationDays: number;
+  pricePerGB: bigint;
+  discountCode?: string;
+  finalPriceToman: bigint;
+};
+
+type PendingTonOrderResult =
+  | { ok: true; orderId: string; tonAmountNano: bigint; tonMemo: string; tonAddress: string; expiresAt: Date }
+  | { ok: false; reason: string; code: 'SERVER_INACTIVE' | 'INVALID_DISCOUNT' | 'UNKNOWN' };
+
 export const buyService = {
+  async createPendingTonOrder(params: PendingTonOrderParams): Promise<PendingTonOrderResult> {
+    const server = await prisma.server.findUnique({ where: { id: params.serverId } });
+    if (!server) return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
+    if (!server.isActive) return { ok: false, reason: 'این سرور دیگه فعال نیست.', code: 'SERVER_INACTIVE' };
+
+    if (params.discountCode) {
+      const dcCheck = await discountService.validate(params.discountCode, params.userId);
+      if (!dcCheck.ok) return { ok: false, reason: dcCheck.reason, code: 'INVALID_DISCOUNT' };
+    }
+
+    const { nanoTon, rateTomanPerTon } = await tonInvoiceService.tomanToNanoTon(params.finalPriceToman);
+    const expiresAt = tonInvoiceService.invoiceExpiry();
+    const basePriceToman = params.pricePerGB * BigInt(params.trafficGB);
+
+    const order = await prisma.$transaction(async (tx) => {
+      const o = await tx.order.create({
+        data: {
+          userId: params.userId,
+          planId: null,
+          serverId: params.serverId,
+          trafficGB: params.trafficGB,
+          durationDays: params.durationDays,
+          pricePerGB: params.pricePerGB,
+          priceToman: params.finalPriceToman,
+          discountCode: params.discountCode ?? null,
+          discountAmount: basePriceToman - params.finalPriceToman,
+          paymentMethod: PaymentMethod.TON,
+          status: OrderStatus.PENDING,
+          tonAmountNano: nanoTon,
+          tonRateSnapshot: rateTomanPerTon,
+          rateValidUntil: expiresAt,
+        },
+      });
+
+      const memo = tonInvoiceService.generateMemo({ kind: 'order', orderId: o.id });
+
+      if (params.discountCode) {
+        await discountService.consume(tx, params.discountCode);
+      }
+
+      return tx.order.update({ where: { id: o.id }, data: { tonMemo: memo } });
+    });
+
+    return {
+      ok: true,
+      orderId: order.id,
+      tonAmountNano: nanoTon,
+      tonMemo: order.tonMemo!,
+      tonAddress: config.TON_WALLET_ADDRESS,
+      expiresAt,
+    };
+  },
+
   async execute(params: ExecuteParams): Promise<ExecuteResult> {
     const basePriceToman = params.pricePerGB * BigInt(params.trafficGB);
 

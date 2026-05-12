@@ -188,7 +188,7 @@ async function matchOrder(payment: TonPaymentRow, tx: TonTx, orderIdPrefix: stri
     return matchTopup(payment, tx, order.userId);
   }
 
-  // Sufficient payment — mark PAID, link payment, ready for fulfilment
+  // Sufficient payment — mark PAID, link payment, then fulfil
   await prisma.$transaction(async (tx2) => {
     await tx2.order.update({
       where: { id: order.id },
@@ -200,9 +200,13 @@ async function matchOrder(payment: TonPaymentRow, tx: TonTx, orderIdPrefix: stri
     });
   });
 
-  logger.info({ orderId: order.id, txHash: tx.hash }, 'Order paid via TON — ready for fulfilment');
+  logger.info({ orderId: order.id, txHash: tx.hash }, 'Order paid via TON — triggering fulfillment');
 
-  // TODO (5.2): trigger VPN config provisioning for this order
+  const { orderFulfillmentService } = await import('./order-fulfillment.service');
+  const fulfillResult = await orderFulfillmentService.fulfill(order.id);
+  if (!fulfillResult.ok) {
+    logger.error({ orderId: order.id, reason: fulfillResult.reason }, 'TON order fulfillment failed');
+  }
 
   return 'matched';
 }

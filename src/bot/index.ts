@@ -12,6 +12,7 @@ import { registerSupportReplyHandler } from './handlers/admin/support-reply.hand
 import { registerMyServicesHandler } from './handlers/my-services.handler';
 import { registerBuyHandler } from './handlers/buy.handler';
 import { registerInviteHandler } from './handlers/invite.handler';
+import { registerWalletHandler } from './handlers/wallet.handler';
 import { supportMessageConversation, supportFollowupConversation } from './conversations/support-message.conversation';
 
 // Module-level bot singleton — set by createBot(), used by services via dynamic import
@@ -36,6 +37,7 @@ export function createBot(): Bot<BotContext> {
   // bot.hears handlers so its message:text listener has first pick.
   registerSupportReplyHandler(bot);
   registerBuyHandler(bot);   // message:text for discount input, before bot.hears
+  registerWalletHandler(bot); // message:text for custom topup amount, before bot.hears
 
   registerStartHandler(bot);
   registerMyServicesHandler(bot);
