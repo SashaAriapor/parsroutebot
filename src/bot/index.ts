@@ -6,6 +6,7 @@ import { logger } from '../lib/logger';
 
 // ─── TRACE ──────────────────────────────────────────────────────────────────
 import { userSyncMiddleware } from './middlewares/user-sync.middleware';
+import { rateLimitMiddleware } from './middlewares/rate-limit.middleware';
 import { registerStartHandler } from './handlers/start.handler';
 import { registerAdminHandlers } from './handlers/admin/menu.handler';
 import { registerAdminStatsHandler } from './handlers/admin/stats.handler';
@@ -51,6 +52,9 @@ export function createBot(): Bot<BotContext> {
   // Register conversations before handlers that enter them.
   bot.use(createConversation(supportMessageConversation, 'supportMessage'));
   bot.use(createConversation(supportFollowupConversation, 'supportFollowup'));
+
+  // Rate limiter: must run before userSyncMiddleware (which hits the DB).
+  bot.use(rateLimitMiddleware);
 
   // Sync every non-bot user to DB before any handler runs.
   bot.use(userSyncMiddleware);

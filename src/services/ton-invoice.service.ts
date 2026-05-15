@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid';
 import { fxClient } from '@/adapters/fx';
 
-const INVOICE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const INVOICE_TTL_MS = 20 * 60 * 1000; // 20 minutes
 const MEMO_PREFIX_TOPUP = 'TOPUP';
 const MEMO_PREFIX_ORDER = 'ORDER';
 
