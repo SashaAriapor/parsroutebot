@@ -1,9 +1,6 @@
 import axios, { isAxiosError, type AxiosInstance } from 'axios';
-import { wrapper } from 'axios-cookiejar-support';
-import { CookieJar } from 'tough-cookie';
 import { logger } from '@/lib/logger';
 import { XuiPanelError } from '@/lib/errors';
-import { getProxyAgent } from '@/lib/proxy';
 import { gbToBytes, generateSubId } from './xui.utils';
 import type {
   IXuiClient,
@@ -53,9 +50,8 @@ type RawTraffic = {
 // ─── XuiClient ────────────────────────────────────────────────────────────────
 
 export class XuiClient implements IXuiClient {
-  private readonly jar = new CookieJar();
+  private sessionCookie: string | null = null;
   private readonly http: AxiosInstance;
-  private loggedIn = false;
 
   constructor(
     private readonly baseUrl: string,
@@ -63,15 +59,11 @@ export class XuiClient implements IXuiClient {
     private readonly password: string,
     private readonly inboundId: number,
   ) {
-    const agent = getProxyAgent();
-    this.http = wrapper(
-      axios.create({
-        baseURL: this.baseUrl,
-        jar: this.jar,
-        timeout: 15_000,
-        ...(agent ? { httpsAgent: agent, httpAgent: agent, proxy: false } : {}),
-      }),
-    );
+    // XUI panel is on the Iranian network — no proxy needed; cookies handled manually
+    this.http = axios.create({
+      baseURL: this.baseUrl,
+      timeout: 15_000,
+    });
   }
 
   // ─── Auth ──────────────────────────────────────────────────────────────────
@@ -84,13 +76,20 @@ export class XuiClient implements IXuiClient {
     try {
       const res = await this.http.post<XuiApiResponse<null>>('/login', body, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        validateStatus: () => true,
       });
 
-      if (!res.data.success) {
+      if (res.data?.success === false) {
         throw new XuiPanelError(`Login failed: ${res.data.msg}`);
       }
 
-      this.loggedIn = true;
+      const setCookie = res.headers['set-cookie'];
+      if (!setCookie?.length) {
+        throw new XuiPanelError('Login succeeded but no session cookie received');
+      }
+
+      // Keep only "key=value" — strip Path, HttpOnly, etc.
+      this.sessionCookie = setCookie[0].split(';')[0];
       logger.info({ baseUrl: this.baseUrl }, 'XUI panel login successful');
     } catch (err) {
       if (err instanceof XuiPanelError) throw err;
@@ -107,7 +106,7 @@ export class XuiClient implements IXuiClient {
     body?: unknown,
     retried = false,
   ): Promise<T> {
-    if (!this.loggedIn) {
+    if (!this.sessionCookie) {
       await this.login();
     }
 
@@ -115,18 +114,25 @@ export class XuiClient implements IXuiClient {
       const res = await this.http.request<XuiApiResponse<T>>({
         method,
         url: path,
-        ...(body !== undefined ? { data: body, headers: { 'Content-Type': 'application/json' } } : {}),
+        headers: {
+          Cookie: this.sessionCookie!,
+          ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        },
+        ...(body !== undefined ? { data: body } : {}),
+        validateStatus: () => true,
       });
 
       logger.debug({ method, path, success: res.data.success }, 'XUI API response');
 
+      if (res.status === 401 || (res.data?.success === false && this.isSessionExpired(res.data.msg))) {
+        if (retried) throw new XuiPanelError('Session expired after re-login');
+        logger.info({ path }, 'XUI session expired — re-logging in');
+        this.sessionCookie = null;
+        await this.login();
+        return this.request<T>(method, path, body, true);
+      }
+
       if (!res.data.success) {
-        if (!retried && this.isSessionExpired(res.data.msg)) {
-          logger.info({ path }, 'XUI session expired — re-logging in');
-          this.loggedIn = false;
-          await this.login();
-          return this.request<T>(method, path, body, true);
-        }
         throw new XuiPanelError(res.data.msg || 'Unknown panel error');
       }
 
@@ -143,7 +149,7 @@ export class XuiClient implements IXuiClient {
 
         if (status === 401 && !retried) {
           logger.info({ path }, 'XUI 401 — re-logging in');
-          this.loggedIn = false;
+          this.sessionCookie = null;
           await this.login();
           return this.request<T>(method, path, body, true);
         }
