@@ -119,6 +119,15 @@ const schema = z.object({
 
   TONAPI_KEY: z.string().optional(),
 
+  SOCKS5_HOST: z.string().optional(),
+  SOCKS5_PORT: z
+    .string()
+    .optional()
+    .transform((val) => (val ? parseInt(val, 10) : undefined))
+    .refine((n) => n === undefined || (!isNaN(n) && n > 0 && n <= 65535), 'SOCKS5_PORT must be a valid port (1–65535)'),
+  SOCKS5_USER: z.string().optional(),
+  SOCKS5_PASS: z.string().optional(),
+
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   LOG_LEVEL: z.string().default('info'),
 });

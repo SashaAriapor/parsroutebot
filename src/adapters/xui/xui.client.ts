@@ -3,6 +3,7 @@ import { wrapper } from 'axios-cookiejar-support';
 import { CookieJar } from 'tough-cookie';
 import { logger } from '@/lib/logger';
 import { XuiPanelError } from '@/lib/errors';
+import { getProxyAgent } from '@/lib/proxy';
 import { gbToBytes, generateSubId } from './xui.utils';
 import type {
   IXuiClient,
@@ -62,11 +63,13 @@ export class XuiClient implements IXuiClient {
     private readonly password: string,
     private readonly inboundId: number,
   ) {
+    const agent = getProxyAgent();
     this.http = wrapper(
       axios.create({
         baseURL: this.baseUrl,
         jar: this.jar,
         timeout: 15_000,
+        ...(agent ? { httpsAgent: agent, httpAgent: agent, proxy: false } : {}),
       }),
     );
   }

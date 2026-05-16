@@ -3,6 +3,7 @@ import { conversations, createConversation } from '@grammyjs/conversations';
 import { type BotContext, type SessionData } from './types';
 import { config } from '../lib/config';
 import { logger } from '../lib/logger';
+import { getProxyAgent, isProxyEnabled } from '../lib/proxy';
 
 // ─── TRACE ──────────────────────────────────────────────────────────────────
 import { userSyncMiddleware } from './middlewares/user-sync.middleware';
@@ -28,7 +29,27 @@ import { supportMessageConversation, supportFollowupConversation } from './conve
 export let bot!: Bot<BotContext>;
 
 export function createBot(): Bot<BotContext> {
-  const _bot = new Bot<BotContext>(config.BOT_TOKEN);
+  if (isProxyEnabled()) {
+    logger.info({
+      host: config.SOCKS5_HOST,
+      port: config.SOCKS5_PORT ?? 1080,
+      hasAuth: !!(config.SOCKS5_USER && config.SOCKS5_PASS),
+    }, 'SOCKS5 proxy enabled');
+  } else {
+    logger.info('No proxy configured — direct connection');
+  }
+
+  const agent = getProxyAgent();
+  const _bot = agent
+    ? new Bot<BotContext>(config.BOT_TOKEN, {
+        client: {
+          baseFetchConfig: {
+            agent,
+            compress: true,
+          },
+        },
+      })
+    : new Bot<BotContext>(config.BOT_TOKEN);
   bot = _bot;
 
   // ─── TRACE: global entry point (must be FIRST bot.use) ───────────────────

@@ -1,5 +1,5 @@
-import axios from 'axios';
 import { logger } from '@/lib/logger';
+import { httpClient } from '@/lib/axios';
 import type { IFxClient } from './fx.interface';
 
 const COINGECKO_URL = 'https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd';
@@ -45,7 +45,7 @@ export class FxClient implements IFxClient {
 }
 
 async function fetchTonUsd(): Promise<number> {
-  const res = await axios.get(COINGECKO_URL, { timeout: 10_000 });
+  const res = await httpClient.get(COINGECKO_URL, { timeout: 10_000 });
   const rate = Number(res.data?.['the-open-network']?.usd);
   if (!Number.isFinite(rate) || rate <= 0) throw new Error('Invalid TON/USD rate from CoinGecko');
   return rate;
@@ -54,7 +54,7 @@ async function fetchTonUsd(): Promise<number> {
 async function fetchUsdtToman(): Promise<number> {
   // Try Nobitex first (accurate from within Iran)
   try {
-    const res = await axios.get(NOBITEX_URL, { timeout: 8_000 });
+    const res = await httpClient.get(NOBITEX_URL, { timeout: 8_000 });
     // lastTradePrice is in Toman (IRT pair)
     const rate = Number(res.data?.lastTradePrice);
     if (Number.isFinite(rate) && rate > 0) return rate;
@@ -63,7 +63,7 @@ async function fetchUsdtToman(): Promise<number> {
   }
 
   // Fallback: Wallex (globally accessible; ask[0].price is in Toman)
-  const res = await axios.get(WALLEX_URL, { timeout: 8_000 });
+  const res = await httpClient.get(WALLEX_URL, { timeout: 8_000 });
   const rate = Number(res.data?.result?.ask?.[0]?.price);
   if (!Number.isFinite(rate) || rate <= 0) throw new Error('Invalid USDT/TMN rate from Wallex');
   return rate;

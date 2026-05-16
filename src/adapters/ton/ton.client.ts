@@ -1,7 +1,8 @@
-import axios, { type AxiosInstance } from 'axios';
 import { Address } from '@ton/core';
 import { logger } from '@/lib/logger';
 import { TonError } from '@/lib/errors';
+import { createHttpClient } from '@/lib/axios';
+import type { AxiosInstance } from 'axios';
 import type { ITonClient, TonTx } from './ton.interface';
 
 const TONAPI_BASE = 'https://tonapi.io';
@@ -10,11 +11,9 @@ export class TonClient implements ITonClient {
   private http: AxiosInstance;
 
   constructor(private apiKey: string | undefined) {
-    this.http = axios.create({
-      baseURL: TONAPI_BASE,
-      timeout: 15_000,
-      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
-    });
+    this.http = createHttpClient(15_000);
+    this.http.defaults.baseURL = TONAPI_BASE;
+    if (apiKey) this.http.defaults.headers.common['Authorization'] = `Bearer ${apiKey}`;
   }
 
   isAddressValid(addr: string): boolean {
