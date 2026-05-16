@@ -1,0 +1,27 @@
+name: Build Docker Image
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:    # دکمه دستی هم داشته باشی
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t parsroute-bot .
+
+      - name: Export image
+        run: docker save parsroute-bot | gzip > parsroute-bot.tar.gz
+
+      - name: Upload as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: parsroute-bot-image
+          path: parsroute-bot.tar.gz
+          retention-days: 1
