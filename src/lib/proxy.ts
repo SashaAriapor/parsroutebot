@@ -10,7 +10,7 @@ export function getProxyAgent(): SocksProxyAgent | null {
     const auth = config.SOCKS5_USER && config.SOCKS5_PASS
       ? `${config.SOCKS5_USER}:${config.SOCKS5_PASS}@`
       : '';
-    const url = `socks5://${auth}${config.SOCKS5_HOST}:${config.SOCKS5_PORT ?? 1080}`;
+    const url = `socks5h://${auth}${config.SOCKS5_HOST}:${config.SOCKS5_PORT ?? 1080}`;
     _agent = new SocksProxyAgent(url);
   }
 
