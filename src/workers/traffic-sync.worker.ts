@@ -1,6 +1,6 @@
 import { Queue, Worker } from 'bullmq';
 import { prisma } from '@/db/client';
-import { xuiClient } from '@/adapters/xui';
+import { pasarguardClient } from '@/adapters/pasarguard';
 import { logger } from '@/lib/logger';
 import { redisConnection } from './index';
 import { sleep } from './shared';
@@ -36,12 +36,12 @@ export function startTrafficSyncWorker() {
 
         for (const c of ids) {
           try {
-            const traffic = await xuiClient.getClientTraffic(c.email);
+            const t = await pasarguardClient.getUserUsed(c.email);
             await prisma.vpnConfig.update({
               where: { id: c.id },
               data: {
-                uploadBytes: traffic.up,
-                downloadBytes: traffic.down,
+                uploadBytes: 0n,
+                downloadBytes: t.usedBytes,
                 lastSyncAt: new Date(),
               },
             });

@@ -178,6 +178,8 @@ model VpnConfig {
   downloadBytes BigInt   @default(0)
   lastSyncAt    DateTime?
 
+  subscriptionUrl  String  @default("")
+
   notified80Pct    Boolean @default(false)
   notified95Pct    Boolean @default(false)
   notifiedExpiry3d Boolean @default(false)

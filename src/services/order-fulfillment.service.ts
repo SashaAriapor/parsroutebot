@@ -1,9 +1,8 @@
-import { randomUUID } from 'crypto';
 import { OrderStatus } from '@prisma/client';
 import { InputFile } from 'grammy';
 import { prisma } from '@/db/client';
-import { xuiClient, generateClientEmail, generateSubId } from '@/adapters/xui';
-import { buildSubUrl } from './config.service';
+import { pasarguardClient, generatePasarGuardUsername, gbToBytes, extractSubToken } from '@/adapters/pasarguard';
+import type { PasarGuardUser } from '@/adapters/pasarguard';
 import { referralService } from './referral.service';
 import { config } from '@/lib/config';
 import { logger } from '@/lib/logger';
@@ -37,25 +36,21 @@ export const orderFulfillmentService = {
       return { ok: false, reason: 'server is inactive' };
     }
 
-    const email = generateClientEmail();
-    const uuid = randomUUID();
-    const subId = generateSubId();
-    const expiryTimeMs = order.durationDays > 0
-      ? Date.now() + order.durationDays * 24 * 3600 * 1000
-      : 0;
+    const pgUsername = generatePasarGuardUsername();
+    const expireAt = order.durationDays > 0
+      ? new Date(Date.now() + order.durationDays * 86400_000)
+      : null;
 
+    let pgUser: PasarGuardUser;
     try {
-      await xuiClient.createClient({
-        email,
-        uuid,
-        totalGB: order.trafficGB,
-        expiryTimeMs,
-        limitIp: 2,
-        subId,
+      pgUser = await pasarguardClient.createUser({
+        username: pgUsername,
+        dataLimitBytes: gbToBytes(order.trafficGB),
+        expireAt,
       });
     } catch (err) {
-      logger.error({ err, orderId }, 'XUI client creation failed during fulfillment');
-      return { ok: false, reason: 'XUI client creation failed' };
+      logger.error({ err, orderId }, 'PasarGuard user creation failed during fulfillment');
+      return { ok: false, reason: 'PasarGuard user creation failed' };
     }
 
     let configId: number;
@@ -73,11 +68,13 @@ export const orderFulfillmentService = {
           data: {
             userId: order.userId,
             serverId: order.serverId!,
-            email,
-            uuid,
-            subId,
+            email: pgUser.username,
+            uuid: String(pgUser.id),
+            subId: extractSubToken(pgUser.subscriptionUrl),
+            subscriptionUrl: pgUser.subscriptionUrl,
+            panelClientId: pgUser.id,
             totalGB: order.trafficGB,
-            expiryAt: expiryTimeMs > 0 ? new Date(expiryTimeMs) : null,
+            expiryAt: expireAt,
             status: 'ACTIVE',
           },
         });
@@ -99,14 +96,14 @@ export const orderFulfillmentService = {
       });
 
       configId = result.cfg.id;
-      subscriptionUrl = buildSubUrl(server, subId);
+      subscriptionUrl = pgUser.subscriptionUrl;
     } catch (err: unknown) {
-      logger.error({ err, orderId, uuid }, 'DB transaction failed after XUI client created during fulfillment — attempting compensating delete');
+      logger.error({ err, orderId, username: pgUser.username }, 'DB transaction failed after PasarGuard user created during fulfillment — attempting compensating delete');
       try {
-        await xuiClient.deleteClient(uuid);
-        logger.info({ uuid }, 'Compensating delete succeeded');
+        await pasarguardClient.deleteUser(pgUser.username);
+        logger.info({ username: pgUser.username }, 'Compensating delete succeeded');
       } catch (delErr) {
-        logger.error({ delErr, uuid }, 'Compensating delete FAILED — orphan client remains in panel');
+        logger.error({ delErr, username: pgUser.username }, 'Compensating delete FAILED — orphan user remains in panel');
       }
       return { ok: false, reason: 'DB transaction failed' };
     }
@@ -121,7 +118,7 @@ export const orderFulfillmentService = {
       trafficGB: order.trafficGB,
       durationDays: order.durationDays,
       subscriptionUrl,
-      expiryTimeMs,
+      expireAt,
       serverFlag: server.flag,
       serverName: server.name,
     });
@@ -149,12 +146,12 @@ async function notifyUserFulfilled(params: {
   trafficGB: number;
   durationDays: number;
   subscriptionUrl: string;
-  expiryTimeMs: number;
+  expireAt: Date | null;
   serverFlag: string | null;
   serverName: string;
 }): Promise<void> {
   const { bot } = await import('@/bot');
-  const expiryDate = params.expiryTimeMs > 0 ? new Date(params.expiryTimeMs) : null;
+  const expiryDate = params.expireAt;
 
   const text =
     `✅ <b>سرویس جدیدت آماده شد!</b>\n\n` +

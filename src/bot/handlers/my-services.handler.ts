@@ -2,7 +2,7 @@ import { type Bot, InputFile, InlineKeyboard } from 'grammy';
 import { type BotContext } from '../types';
 import { MENU } from '../constants';
 import { ConfigStatus } from '@prisma/client';
-import { configService, buildSubUrl } from '@/services/config.service';
+import { configService } from '@/services/config.service';
 // TODO: re-enable when extension/traffic-add features are ready
 // import { renewalService } from '@/services/renewal.service';
 // import { getTrafficPackage, TRAFFIC_PACKAGES } from '@/services/traffic-packages';
@@ -224,7 +224,7 @@ export function registerMyServicesHandler(bot: Bot<BotContext>): void {
       return;
     }
 
-    const url = buildSubUrl(cfg.server, cfg.subId);
+    const url = cfg.subscriptionUrl;
 
     await ctx.reply(
       `🔗 لینک اشتراک سرویس #${cfg.id}:\n\n` +
@@ -248,7 +248,7 @@ export function registerMyServicesHandler(bot: Bot<BotContext>): void {
       return;
     }
 
-    const url = buildSubUrl(cfg.server, cfg.subId);
+    const url = cfg.subscriptionUrl;
 
     try {
       const buffer = await generateQRBuffer(url);

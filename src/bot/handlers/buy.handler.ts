@@ -9,7 +9,6 @@ import { formatToman, formatGB, formatDateIR } from '@/lib/format';
 import { generateQRBuffer } from '@/lib/qrcode';
 import { buyService } from '@/services/buy.service';
 import { discountService } from '@/services/discount.service';
-import { buildSubUrl } from '@/services/config.service';
 import { type BuyState, getBuyState, setBuyState, clearBuyState } from '../state/pending-buy-state';
 import {
   gbPickerKeyboard,

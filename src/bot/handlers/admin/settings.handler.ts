@@ -38,9 +38,7 @@ async function buildSettingsText(): Promise<string> {
     `- آدرس: <code>${config.TON_WALLET_ADDRESS}</code>\n` +
     `- نرخ لحظه‌ای: ${rateStr}${fetchedAtStr}\n\n` +
     `📡 <b>پنل</b>\n` +
-    `- پروتکل ساب: ${config.XUI_SUB_PROTOCOL}\n` +
-    `- دامنه: <code>${config.XUI_SUB_DOMAIN}:${config.XUI_SUB_PORT}${config.XUI_SUB_PATH}</code>\n` +
-    `- Inbound ID: ${config.XUI_INBOUND_ID}\n\n` +
+    `- سرور: <code>${config.PASARGUARD_URL}</code>\n\n` +
     `👤 <b>ادمین‌ها</b>\n` +
     adminLines + `\n\n` +
     `📺 چنل لاگ: <code>${config.LOG_CHANNEL_ID}</code>\n\n` +

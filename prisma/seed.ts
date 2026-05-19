@@ -23,26 +23,23 @@ async function main() {
   console.log(`✅ Seeded ${plans.length} plans`);
 
   // Default server — upsert by name
-  const inboundId = parseInt(process.env.XUI_INBOUND_ID ?? '1', 10);
-  const subDomain = process.env.XUI_SUB_DOMAIN ?? 'sub.example.com';
-  const subPort   = parseInt(process.env.XUI_SUB_PORT ?? '2096', 10);
-  const subPath   = process.env.XUI_SUB_PATH ?? '/sub/';
+  const panelUrl = process.env.PASARGUARD_URL ?? '';
 
   await prisma.server.upsert({
     where:  { name: 'Germany-1' },
-    update: { inboundId, subDomain, subPort, subPath },
+    update: { panelUrl },
     create: {
       name:          'Germany-1',
       flag:          '🇩🇪',
-      panelUrl:      null,
+      panelUrl,
       panelUsername: null,
       panelPassword: null,
-      inboundId,
-      subDomain,
-      subPort,
-      subPath,
-      isActive:  true,
-      sortOrder: 1,
+      inboundId:     0,
+      subDomain:     '',
+      subPort:       443,
+      subPath:       '/sub/',
+      isActive:      true,
+      sortOrder:     1,
     },
   });
   console.log('✅ Seeded default server (Germany-1)');

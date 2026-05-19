@@ -11,7 +11,9 @@
       "Bash(pnpm add *)",
       "Bash(pnpm prisma *)",
       "Bash(pnpm test:ton *)",
-      "Bash(curl -s --max-time 8 \"https://api.wallex.ir/v1/depth?symbol=USDTTMN\")"
+      "Bash(curl -s --max-time 8 \"https://api.wallex.ir/v1/depth?symbol=USDTTMN\")",
+      "Bash(pnpm build *)",
+      "Bash(pnpm db:generate *)"
     ]
   }
 }

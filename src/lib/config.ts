@@ -22,57 +22,22 @@ const schema = z.object({
     .transform((val) => parseInt(val, 10))
     .refine((n) => !isNaN(n) && n < 0, 'LOG_CHANNEL_ID must be a negative number'),
 
-  XUI_PANEL_URL: z
+  PASARGUARD_URL: z
     .string()
-    .url('XUI_PANEL_URL must be a valid URL (e.g. http://1.2.3.4:54321/secretpath)')
+    .url('PASARGUARD_URL must be a valid URL (e.g. https://liveprout.pro)')
     .transform((val) => {
-      if (val.endsWith('/')) {
-        console.warn('[config] XUI_PANEL_URL has a trailing slash — stripping it.');
-        return val.slice(0, -1);
-      }
+      if (val.endsWith('/')) return val.slice(0, -1);
       return val;
     }),
 
-  XUI_USERNAME: z.string().min(1, 'XUI_USERNAME is required'),
-  XUI_PASSWORD: z.string().min(1, 'XUI_PASSWORD is required'),
+  PASARGUARD_USERNAME: z.string().min(1, 'PASARGUARD_USERNAME is required'),
+  PASARGUARD_PASSWORD: z.string().min(1, 'PASARGUARD_PASSWORD is required'),
 
-  XUI_INBOUND_ID: z
+  PASARGUARD_GROUP_ID: z
     .string()
-    .min(1, 'XUI_INBOUND_ID is required')
+    .min(1, 'PASARGUARD_GROUP_ID is required')
     .transform((val) => parseInt(val, 10))
-    .refine((n) => !isNaN(n) && n > 0, 'XUI_INBOUND_ID must be a positive integer'),
-
-  XUI_SUB_PROTOCOL: z
-    .enum(['http', 'https'])
-    .default('https'),
-
-  XUI_SUB_DOMAIN: z
-    .string()
-    .min(1, 'XUI_SUB_DOMAIN is required')
-    .transform((v) => {
-      // Strip protocol prefix if user accidentally pasted a full URL
-      let s = v.trim().replace(/^https?:\/\//i, '');
-      s = s.split('/')[0]; // drop any path portion
-      s = s.split(':')[0]; // drop embedded port (we have XUI_SUB_PORT)
-      return s;
-    })
-    .pipe(z.string().min(1, 'XUI_SUB_DOMAIN must not be empty after sanitization')),
-
-  XUI_SUB_PORT: z
-    .string()
-    .default('2096')
-    .transform((val) => parseInt(val, 10))
-    .refine((n) => !isNaN(n) && n > 0 && n <= 65535, 'XUI_SUB_PORT must be a valid port (1–65535)'),
-
-  XUI_SUB_PATH: z
-    .string()
-    .default('/sub/')
-    .transform((v) => {
-      let s = v.trim();
-      if (!s.startsWith('/')) s = '/' + s;
-      if (!s.endsWith('/')) s = s + '/';
-      return s;
-    }),
+    .refine((n) => !isNaN(n) && n > 0, 'PASARGUARD_GROUP_ID must be a positive integer'),
 
   REFERRAL_COMMISSION_PERCENT: z
     .string()

@@ -1,8 +1,7 @@
-import { randomUUID } from 'crypto';
 import { OrderStatus, PaymentMethod, WalletTxType } from '@prisma/client';
 import { prisma } from '@/db/client';
-import { xuiClient, generateClientEmail, generateSubId } from '@/adapters/xui';
-import { buildSubUrl } from './config.service';
+import { pasarguardClient, generatePasarGuardUsername, gbToBytes, extractSubToken } from '@/adapters/pasarguard';
+import type { PasarGuardUser } from '@/adapters/pasarguard';
 import { discountService } from './discount.service';
 import { referralService } from './referral.service';
 import { tonInvoiceService } from './ton-invoice.service';
@@ -123,30 +122,25 @@ export const buyService = {
       if (!dcCheck.ok) return { ok: false, reason: dcCheck.reason, code: 'INVALID_DISCOUNT' };
     }
 
-    // 2. Generate XUI client identifiers
-    const email = generateClientEmail();
-    const uuid = randomUUID();
-    const subId = generateSubId();
-    const expiryTimeMs = params.durationDays > 0
-      ? Date.now() + params.durationDays * 24 * 3600 * 1000
-      : 0;
+    // 2. Create PasarGuard user FIRST — if this fails, no DB changes yet
+    const pgUsername = generatePasarGuardUsername();
+    const expireAt = params.durationDays > 0
+      ? new Date(Date.now() + params.durationDays * 86400_000)
+      : null;
 
-    // 3. Create XUI client FIRST — if this fails, no DB changes yet
+    let pgUser: PasarGuardUser;
     try {
-      await xuiClient.createClient({
-        email,
-        uuid,
-        totalGB: params.trafficGB,
-        expiryTimeMs,
-        limitIp: 2,
-        subId,
+      pgUser = await pasarguardClient.createUser({
+        username: pgUsername,
+        dataLimitBytes: gbToBytes(params.trafficGB),
+        expireAt,
       });
     } catch (err) {
-      logger.error({ err, params }, 'Failed to create XUI client during purchase');
+      logger.error({ err, params }, 'Failed to create PasarGuard user during purchase');
       return { ok: false, reason: 'خطا در ساخت کانفیگ روی سرور. لطفاً به پشتیبانی پیام بده.', code: 'PANEL_FAILED' };
     }
 
-    // 4. DB transaction
+    // 3. DB transaction
     try {
       const dbResult = await prisma.$transaction(async (tx) => {
         // Re-fetch user inside tx for fresh balance (guard against race)
@@ -180,11 +174,13 @@ export const buyService = {
           data: {
             userId: params.userId,
             serverId: params.serverId,
-            email,
-            uuid,
-            subId,
+            email: pgUser.username,
+            uuid: String(pgUser.id),
+            subId: extractSubToken(pgUser.subscriptionUrl),
+            subscriptionUrl: pgUser.subscriptionUrl,
+            panelClientId: pgUser.id,
             totalGB: params.trafficGB,
-            expiryAt: expiryTimeMs > 0 ? new Date(expiryTimeMs) : null,
+            expiryAt: expireAt,
             status: 'ACTIVE',
           },
         });
@@ -219,31 +215,29 @@ export const buyService = {
         return { cfg, order, newBalance };
       });
 
-      // 5. Referral commission (separate transaction, after main tx commits)
+      // 4. Referral commission (separate transaction, after main tx commits)
       const referral = await referralService.tryCreditCommission(
         params.userId,
         params.finalPriceToman,
         dbResult.order.id,
       );
 
-      const subscriptionUrl = buildSubUrl(server, subId);
-
       return {
         ok: true,
         configId: dbResult.cfg.id,
-        subscriptionUrl,
+        subscriptionUrl: pgUser.subscriptionUrl,
         newBalance: dbResult.newBalance,
         referral,
       };
     } catch (err: unknown) {
-      // DB transaction failed — XUI client was already created. Attempt compensating delete.
-      logger.error({ err, email, uuid }, 'DB transaction failed AFTER XUI client created — attempting compensating delete');
+      // DB transaction failed — PasarGuard user was already created. Attempt compensating delete.
+      logger.error({ err, username: pgUser.username }, 'DB transaction failed AFTER PasarGuard user created — attempting compensating delete');
 
       try {
-        await xuiClient.deleteClient(uuid);
-        logger.info({ uuid }, 'Compensating delete succeeded');
+        await pasarguardClient.deleteUser(pgUser.username);
+        logger.info({ username: pgUser.username }, 'Compensating delete succeeded');
       } catch (delErr) {
-        logger.error({ delErr, uuid }, 'Compensating delete FAILED — orphan client remains in panel');
+        logger.error({ delErr, username: pgUser.username }, 'Compensating delete FAILED — orphan user remains in panel');
       }
 
       const errCode = (err instanceof Error && (err as NodeJS.ErrnoException).code === 'INSUFFICIENT_BALANCE')

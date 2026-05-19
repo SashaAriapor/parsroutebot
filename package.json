@@ -12,7 +12,7 @@
     "db:seed": "prisma db seed",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
-    "test:xui": "tsx scripts/test-xui.ts",
+    "test:pg": "tsx scripts/test-pasarguard.ts",
     "test:ton": "tsx scripts/test-ton.ts"
   },
   "prisma": {

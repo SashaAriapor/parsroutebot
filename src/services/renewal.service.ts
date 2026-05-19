@@ -1,6 +1,6 @@
 import { WalletTxType } from '@prisma/client';
 import { prisma } from '@/db/client';
-import { xuiClient } from '@/adapters/xui';
+import { pasarguardClient, gbToBytes } from '@/adapters/pasarguard';
 import { logger } from '@/lib/logger';
 import { getTrafficPackage } from './traffic-packages';
 
@@ -32,9 +32,9 @@ export const renewalService = {
 
     // Panel call BEFORE DB transaction. If panel fails, transaction never runs.
     try {
-      await xuiClient.updateClient(config.uuid, { expiryTimeMs: newExpiryMs });
+      await pasarguardClient.modifyUser(config.email, { expireAt: newExpiry });
     } catch (err) {
-      logger.error({ err, uuid: config.uuid, configId: config.id }, 'Panel updateClient failed during extend');
+      logger.error({ err, email: config.email, configId: config.id }, 'Panel modifyUser failed during extend');
       return { ok: false, reason: 'PANEL_ERROR' };
     }
 
@@ -68,7 +68,7 @@ export const renewalService = {
     } catch (err) {
       // Panel was updated but DB failed — log loudly for manual reconciliation.
       logger.error(
-        { err, uuid: config.uuid, configId: config.id, newExpiryMs },
+        { err, email: config.email, configId: config.id, newExpiry },
         'CRITICAL: panel updated but DB transaction failed — manual fix required',
       );
       return { ok: false, reason: 'PANEL_ERROR' };
@@ -97,9 +97,9 @@ export const renewalService = {
     const newTotalGB = config.totalGB + pkg.gb;
 
     try {
-      await xuiClient.updateClient(config.uuid, { totalGB: newTotalGB });
+      await pasarguardClient.modifyUser(config.email, { dataLimitBytes: gbToBytes(newTotalGB) });
     } catch (err) {
-      logger.error({ err, uuid: config.uuid, configId: config.id }, 'Panel updateClient failed during addTraffic');
+      logger.error({ err, email: config.email, configId: config.id }, 'Panel modifyUser failed during addTraffic');
       return { ok: false, reason: 'PANEL_ERROR' };
     }
 
@@ -131,7 +131,7 @@ export const renewalService = {
       ]);
     } catch (err) {
       logger.error(
-        { err, uuid: config.uuid, configId: config.id, newTotalGB },
+        { err, email: config.email, configId: config.id, newTotalGB },
         'CRITICAL: panel updated but DB transaction failed during addTraffic — manual fix required',
       );
       return { ok: false, reason: 'PANEL_ERROR' };
