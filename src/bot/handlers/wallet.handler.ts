@@ -80,13 +80,13 @@ async function renderInvoice(ctx: BotContext, edit: boolean, amountToman: bigint
     '📬 آدرس کیف پول:',
     `<code>${invoice.tonAddress}</code>`,
     '',
-    '📝 موضوع پرداخت (حتماً وارد کن!):',
+    '💬 کامنت (Comment) — حتماً وارد کن:',
     `<code>${invoice.memo}</code>`,
     '',
     `⏱ اعتبار: تا ${formatDateIR(invoice.expiresAt)}`,
     '',
-    '⚠️ موضوع پرداخت رو دقیقاً وارد کن وگرنه شارژ اعمال نمیشه.',
-    'مبلغ واریزی بر اساس نرخ لحظه دریافت تبدیل میشه.',
+    '⚠️ کامنت رو دقیقاً کپی کن و تو کیف پولت وارد کن.',
+    'بدون کامنت، پرداختت شناسایی نمیشه.',
   ].join('\n');
 
   const kb = walletInvoiceKeyboard(invoice.memo, invoice.nanoTon);
@@ -207,7 +207,7 @@ export function registerWalletHandler(bot: Bot<BotContext>): void {
       try {
         const buffer = await generateQRBuffer(deepLink);
         await ctx.replyWithPhoto(new InputFile(buffer, 'qr.png'), {
-          caption: `🔳 این QR رو در Tonkeeper یا کیف TON خودت اسکن کن.\n\n📝 موضوع: <code>${memo}</code>`,
+          caption: `🔳 این QR رو در Tonkeeper یا کیف TON خودت اسکن کن.\n\n💬 کامنت: <code>${memo}</code>`,
           parse_mode: 'HTML',
         });
         await ctx.answerCallbackQuery();

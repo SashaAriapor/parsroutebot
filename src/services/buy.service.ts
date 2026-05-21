@@ -50,20 +50,25 @@ type PendingTonOrderResult =
   | { ok: true; orderId: string; tonAmountNano: bigint; tonMemo: string; tonAddress: string; expiresAt: Date }
   | { ok: false; reason: string; code: 'SERVER_INACTIVE' | 'INVALID_DISCOUNT' | 'UNKNOWN' };
 
+type WalletOrderResult =
+  | { ok: true; orderId: string }
+  | { ok: false; reason: string; code: 'INSUFFICIENT_BALANCE' | 'SERVER_INACTIVE' | 'INVALID_DISCOUNT' | 'UNKNOWN' };
+
 export const buyService = {
   async createPendingTonOrder(params: PendingTonOrderParams): Promise<PendingTonOrderResult> {
     const server = await prisma.server.findUnique({ where: { id: params.serverId } });
     if (!server) return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
     if (!server.isActive) return { ok: false, reason: 'این سرور دیگه فعال نیست.', code: 'SERVER_INACTIVE' };
 
+    const basePriceToman = params.pricePerGB * BigInt(params.trafficGB);
+
     if (params.discountCode) {
-      const dcCheck = await discountService.validate(params.discountCode, params.userId);
+      const dcCheck = await discountService.validate(params.discountCode, params.userId, null, basePriceToman);
       if (!dcCheck.ok) return { ok: false, reason: dcCheck.reason, code: 'INVALID_DISCOUNT' };
     }
 
     const { nanoTon, rateTomanPerTon } = await tonInvoiceService.tomanToNanoTon(params.finalPriceToman);
     const expiresAt = tonInvoiceService.invoiceExpiry();
-    const basePriceToman = params.pricePerGB * BigInt(params.trafficGB);
 
     const order = await prisma.$transaction(async (tx) => {
       const o = await tx.order.create({
@@ -104,6 +109,85 @@ export const buyService = {
     };
   },
 
+  async createPaidWalletOrder(params: ExecuteParams): Promise<WalletOrderResult> {
+    const basePriceToman = params.pricePerGB * BigInt(params.trafficGB);
+
+    const [user, server] = await Promise.all([
+      prisma.user.findUnique({ where: { id: params.userId } }),
+      prisma.server.findUnique({ where: { id: params.serverId } }),
+    ]);
+
+    if (!user || !server) return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
+    if (!server.isActive) return { ok: false, reason: 'این سرور دیگه فعال نیست.', code: 'SERVER_INACTIVE' };
+    if (user.walletBalance < params.finalPriceToman) return { ok: false, reason: 'موجودی کافی نیست.', code: 'INSUFFICIENT_BALANCE' };
+
+    if (params.discountCode) {
+      const dcCheck = await discountService.validate(params.discountCode, params.userId, null, basePriceToman);
+      if (!dcCheck.ok) return { ok: false, reason: dcCheck.reason, code: 'INVALID_DISCOUNT' };
+    }
+
+    try {
+      const orderId = await prisma.$transaction(async (tx) => {
+        const freshUser = await tx.user.findUniqueOrThrow({ where: { id: params.userId } });
+        if (freshUser.walletBalance < params.finalPriceToman) {
+          throw Object.assign(new Error('INSUFFICIENT_BALANCE_RACE'), { code: 'INSUFFICIENT_BALANCE' });
+        }
+
+        if (params.discountCode) {
+          await discountService.consume(tx, params.discountCode);
+        }
+
+        const order = await tx.order.create({
+          data: {
+            userId: params.userId,
+            planId: null,
+            serverId: params.serverId,
+            trafficGB: params.trafficGB,
+            durationDays: params.durationDays,
+            pricePerGB: params.pricePerGB,
+            priceToman: params.finalPriceToman,
+            discountCode: params.discountCode ?? null,
+            discountAmount: basePriceToman - params.finalPriceToman,
+            paymentMethod: PaymentMethod.WALLET,
+            status: OrderStatus.PAID,
+            paidAt: new Date(),
+          },
+        });
+
+        const newBalance = freshUser.walletBalance - params.finalPriceToman;
+
+        await tx.user.update({
+          where: { id: params.userId },
+          data: { walletBalance: newBalance },
+        });
+
+        await tx.walletTransaction.create({
+          data: {
+            userId: params.userId,
+            type: WalletTxType.PURCHASE,
+            amountToman: -params.finalPriceToman,
+            balanceAfter: newBalance,
+            orderId: order.id,
+            description: `خرید ${params.trafficGB} گیگابایت`,
+          },
+        });
+
+        return order.id;
+      });
+
+      return { ok: true, orderId };
+    } catch (err: unknown) {
+      const errCode = (err instanceof Error && (err as NodeJS.ErrnoException).code === 'INSUFFICIENT_BALANCE')
+        ? 'INSUFFICIENT_BALANCE' as const
+        : 'UNKNOWN' as const;
+      return {
+        ok: false,
+        reason: errCode === 'INSUFFICIENT_BALANCE' ? 'موجودی کافی نیست.' : 'خطا در ثبت سفارش.',
+        code: errCode,
+      };
+    }
+  },
+
   async execute(params: ExecuteParams): Promise<ExecuteResult> {
     const basePriceToman = params.pricePerGB * BigInt(params.trafficGB);
 
@@ -118,7 +202,7 @@ export const buyService = {
     if (user.walletBalance < params.finalPriceToman) return { ok: false, reason: 'موجودی کافی نیست.', code: 'INSUFFICIENT_BALANCE' };
 
     if (params.discountCode) {
-      const dcCheck = await discountService.validate(params.discountCode, params.userId);
+      const dcCheck = await discountService.validate(params.discountCode, params.userId, null, basePriceToman);
       if (!dcCheck.ok) return { ok: false, reason: dcCheck.reason, code: 'INVALID_DISCOUNT' };
     }
 

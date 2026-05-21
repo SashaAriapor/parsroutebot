@@ -9,7 +9,10 @@ export type AdminInputAction =
   | { kind: 'discount-code-input' }
   | { kind: 'discount-percent-input'; code: string }
   | { kind: 'discount-max-uses-input'; code: string; percentOff: number }
-  | { kind: 'discount-expiry-input'; code: string; percentOff: number; maxUses: number | null };
+  | { kind: 'discount-expiry-input'; code: string; percentOff: number; maxUses: number | null }
+  | { kind: 'discount-min-purchase-input'; code: string; percentOff: number; maxUses: number | null; expiresAt: Date | null }
+  | { kind: 'discount-user-input'; code: string; percentOff: number; maxUses: number | null; expiresAt: Date | null; minPurchase: bigint | null }
+  | { kind: 'discount-user-id-input'; code: string; percentOff: number; maxUses: number | null; expiresAt: Date | null; minPurchase: bigint | null };
 
 type Pending = {
   action: AdminInputAction;

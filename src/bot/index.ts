@@ -20,6 +20,7 @@ import { registerSupportHandler } from './handlers/support.handler';
 import { registerSupportReplyHandler } from './handlers/admin/support-reply.handler';
 import { registerAdminUsersHandler } from './handlers/admin/users.handler';
 import { registerMyServicesHandler } from './handlers/my-services.handler';
+import { registerAccountNameHandler } from './handlers/account-name.handler';
 import { registerBuyHandler } from './handlers/buy.handler';
 import { registerInviteHandler } from './handlers/invite.handler';
 import { registerWalletHandler } from './handlers/wallet.handler';
@@ -84,6 +85,7 @@ export function createBot(): Bot<BotContext> {
   // bot.hears handlers so its message:text listener has first pick.
   registerSupportReplyHandler(bot);
   registerAdminUsersHandler(bot); // message:text for admin input, before bot.hears
+  registerAccountNameHandler(bot); // message:text for account name input, before bot.hears
   registerBuyHandler(bot);   // message:text for discount input, before bot.hears
   registerWalletHandler(bot); // message:text for custom topup amount, before bot.hears
 

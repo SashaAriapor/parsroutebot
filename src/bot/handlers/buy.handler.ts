@@ -9,6 +9,8 @@ import { formatToman, formatGB, formatDateIR } from '@/lib/format';
 import { generateQRBuffer } from '@/lib/qrcode';
 import { buyService } from '@/services/buy.service';
 import { discountService } from '@/services/discount.service';
+import { generatePasarGuardUsername } from '@/adapters/pasarguard';
+import { setUserPending } from '@/bot/state/pending-user-input';
 import { type BuyState, getBuyState, setBuyState, clearBuyState } from '../state/pending-buy-state';
 import {
   gbPickerKeyboard,
@@ -23,7 +25,7 @@ import {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const QUICK_GB_PICKS = [10, 30, 50, 100] as const;
+const QUICK_GB_PICKS = [1, 5, 10, 20] as const;
 
 function computeQuickPicks(): Array<{ gb: number; price: bigint }> {
   return QUICK_GB_PICKS.map((gb) => ({
@@ -322,7 +324,7 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
     // Discount code input
     if (state.awaitingDiscountInput) {
       const code = ctx.message.text.trim().toUpperCase();
-      const result = await discountService.validate(code, BigInt(ctx.from.id));
+      const result = await discountService.validate(code, BigInt(ctx.from.id), null, state.basePriceToman!);
 
       if (!result.ok) {
         await ctx.reply(`❌ ${result.reason}\n\nدوباره کد رو بفرست یا روی «بدون تخفیف» بزن.`);
@@ -421,11 +423,11 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
         '📬 آدرس کیف پول:',
         `<code>${result.tonAddress}</code>`,
         '',
-        '📝 موضوع پرداخت (حتماً وارد کن!):',
+        '💬 کامنت (Comment) — حتماً وارد کن:',
         `<code>${result.tonMemo}</code>`,
         '',
-        '⚠️ موضوع پرداخت رو دقیقاً وارد کن.',
-        'بعد از تأیید شبکه، سرویست به‌صورت خودکار فعال میشه.',
+        '⚠️ کامنت رو دقیقاً کپی کن و تو کیف پولت وارد کن.',
+        'بدون کامنت، پرداختت شناسایی نمیشه.',
       ].join('\n');
 
       await ctx.editMessageText(text, {
@@ -450,7 +452,7 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
       try {
         const buffer = await generateQRBuffer(deepLink);
         await ctx.replyWithPhoto(new InputFile(buffer, 'qr.png'), {
-          caption: `🔳 این QR رو در Tonkeeper یا کیف TON خودت اسکن کن.\n\n📝 موضوع: <code>${order.tonMemo}</code>`,
+          caption: `🔳 این QR رو در Tonkeeper یا کیف TON خودت اسکن کن.\n\n💬 کامنت: <code>${order.tonMemo}</code>`,
           parse_mode: 'HTML',
         });
         await ctx.answerCallbackQuery();
@@ -602,7 +604,7 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
 
       await ctx.answerCallbackQuery({ text: '⏳ در حال پردازش...' });
 
-      const result = await buyService.execute({
+      const result = await buyService.createPaidWalletOrder({
         userId: BigInt(userId),
         serverId: state.serverId,
         trafficGB: state.trafficGB,
@@ -615,7 +617,6 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
       if (!result.ok) {
         const msgMap: Record<string, string> = {
           INSUFFICIENT_BALANCE: '❌ موجودی کافی نیست. لطفاً کیف پولت رو شارژ کن.',
-          PANEL_FAILED: '❌ خطا در ساخت کانفیگ روی سرور. لطفاً به پشتیبانی پیام بده.',
           SERVER_INACTIVE: '❌ این سرور دیگه فعال نیست. لطفاً دوباره از ابتدا امتحان کن.',
           INVALID_DISCOUNT: `❌ کد تخفیف منقضی شده یا نامعتبره: ${result.reason}`,
           UNKNOWN: '❌ خطا در ثبت سفارش. اگه از کیف پولت کسر شد، با پشتیبانی تماس بگیر.',
@@ -625,65 +626,17 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
         return;
       }
 
-      const finalState = { ...state };
       clearBuyState(userId);
+      const generatedName = generatePasarGuardUsername();
+      setUserPending(userId, { kind: 'account-name-input', orderId: result.orderId, generatedName });
 
-      const server = await prisma.server.findUnique({ where: { id: finalState.serverId! } });
-      const serverName = `${server?.flag ?? ''}${server?.name ?? '—'}`;
-      const expiryDate = finalState.durationDays && finalState.durationDays > 0
-        ? new Date(Date.now() + finalState.durationDays * 24 * 3600 * 1000)
-        : null;
-
-      const successText =
-        `✅ <b>خرید با موفقیت انجام شد!</b>\n\n` +
-        `🛡️ سرویس #${result.configId}\n` +
-        `📍 ${escapeHtml(serverName)}\n` +
-        `📦 ${formatGB(finalState.trafficGB!)}  •  ${finalState.durationDays!} روز` +
-        (expiryDate ? `\n📅 انقضا: ${formatDateIR(expiryDate)}` : '') +
-        `\n\n🔗 لینک اشتراک:\n<code>${result.subscriptionUrl}</code>\n\n` +
-        'این لینک رو کپی کن و توی برنامه VPN ایمپورت کن.\n\n' +
-        `💰 موجودی فعلی کیف پول: ${formatToman(result.newBalance)}`;
-
-      await ctx.editMessageText(successText, {
-        parse_mode: 'HTML',
-        reply_markup: successKeyboard(),
-      });
-
-      // QR code as a separate photo
-      try {
-        const buffer = await generateQRBuffer(result.subscriptionUrl);
-        await ctx.replyWithPhoto(new InputFile(buffer, 'qr.png'), {
-          caption: '🔳 برای ایمپورت سریع، این QR رو با برنامه VPN خودت اسکن کن.',
-        });
-      } catch (err) {
-        logger.warn({ err }, 'QR generation failed after successful purchase');
-      }
-
-      // Notify referrer if commission credited
-      if (result.referral.credited) {
-        try {
-          await ctx.api.sendMessage(
-            Number(result.referral.referrerId),
-            `🎉 کمیسیون رفرال دریافت کردی!\n\n💰 +${formatToman(result.referral.commission)}\n\nاز خرید یکی از دوستانی که با لینکت دعوت کردی.`,
-          );
-        } catch (err) {
-          logger.warn({ err, referrerId: result.referral.referrerId }, 'Failed to notify referrer');
-        }
-      }
-
-      // Channel log
-      await postBuySaleToChannel(ctx, {
-        configId: result.configId,
-        trafficGB: finalState.trafficGB!,
-        durationDays: finalState.durationDays!,
-        serverName: server?.name ?? '—',
-        finalPrice: finalState.finalPriceToman!,
-        discountCode: finalState.discountCode,
-        discountAmount: finalState.discountAmount ?? 0n,
-        newBalance: result.newBalance,
-        referral: result.referral,
-      });
-
+      await ctx.editMessageText(
+        `✅ پرداخت انجام شد!\n\n` +
+        `یه اسم برای اکانتت انتخاب کن:\n\n` +
+        `⚠️ فقط حروف انگلیسی و عدد — بدون فاصله یا کاراکتر خاص\n` +
+        `مثال: john123 یا myaccount\n\n` +
+        `برای اسم خودکار، فقط — بفرست`,
+      );
       return;
     }
 

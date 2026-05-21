@@ -18,6 +18,8 @@ type DiscountDraft = {
   percentOff: number;
   maxUses: number | null;
   expiresAt: Date | null;
+  minPurchase: bigint | null;
+  onlyForUserId: bigint | null;
 };
 
 const draftStash = new Map<number, DiscountDraft>();
@@ -80,6 +82,8 @@ export function registerDiscountCreateHandler(bot: Bot<BotContext>): void {
           percentOff: draft.percentOff,
           maxUses: draft.maxUses,
           expiresAt: draft.expiresAt,
+          minPurchaseToman: draft.minPurchase,
+          onlyForUserId: draft.onlyForUserId,
           isActive: true,
           createdBy: BigInt(adminId),
         },
@@ -93,6 +97,8 @@ export function registerDiscountCreateHandler(bot: Bot<BotContext>): void {
           percent: draft.percentOff,
           maxUses: draft.maxUses ?? 'unlimited',
           expiresAt: draft.expiresAt?.toISOString() ?? 'never',
+          minPurchase: draft.minPurchase ? String(draft.minPurchase) : null,
+          onlyForUserId: draft.onlyForUserId ? String(draft.onlyForUserId) : null,
         },
       });
 
@@ -248,6 +254,64 @@ export function registerDiscountCreateHandler(bot: Bot<BotContext>): void {
     }
   });
 
+  // ── For-all: code applies to everyone ────────────────────────────────────
+  admin.callbackQuery('admin:discount:for-all', adminMiddleware, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const adminId = ctx.from.id;
+    const pending = getAdminPending(adminId);
+    if (!pending || pending.kind !== 'discount-user-input') return;
+
+    clearAdminPending(adminId);
+    stashDiscountDraft(adminId, {
+      code: pending.code,
+      percentOff: pending.percentOff,
+      maxUses: pending.maxUses,
+      expiresAt: pending.expiresAt,
+      minPurchase: pending.minPurchase,
+      onlyForUserId: null,
+    });
+
+    const expiryLabel = pending.expiresAt ? formatDateIR(pending.expiresAt) : 'بدون انقضا';
+    const minLabel = pending.minPurchase ? formatToman(pending.minPurchase) : 'بدون حداقل';
+    await ctx.editMessageText(
+      `📋 <b>خلاصه کد تخفیف:</b>\n\n` +
+      `• کد: <code>${pending.code}</code>\n` +
+      `• درصد: <b>${pending.percentOff}٪</b>\n` +
+      `• حداقل خرید: ${minLabel}\n` +
+      `• حداکثر استفاده: ${pending.maxUses === null ? 'نامحدود' : pending.maxUses}\n` +
+      `• انقضا: ${expiryLabel}\n` +
+      `• مخصوص کاربر: همه\n\n` +
+      `تأیید می‌کنی؟`,
+      {
+        parse_mode: 'HTML',
+        reply_markup: new InlineKeyboard()
+          .text('✅ بساز', 'admin:discount:confirm')
+          .text('❌ انصراف', 'admin:cancel-pending'),
+      },
+    );
+  });
+
+  // ── For-user: prompt for Telegram user ID ─────────────────────────────────
+  admin.callbackQuery('admin:discount:for-user', adminMiddleware, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const adminId = ctx.from.id;
+    const pending = getAdminPending(adminId);
+    if (!pending || pending.kind !== 'discount-user-input') return;
+
+    setAdminPending(adminId, {
+      kind: 'discount-user-id-input',
+      code: pending.code,
+      percentOff: pending.percentOff,
+      maxUses: pending.maxUses,
+      expiresAt: pending.expiresAt,
+      minPurchase: pending.minPurchase,
+    });
+    await ctx.editMessageText(
+      'آی‌دی تلگرام کاربر مورد نظر رو بفرست:',
+      { reply_markup: cancelPendingKeyboard() },
+    );
+  });
+
   bot.use(admin);
 
   // ── Text handler: multi-step discount input ────────────────────────────────
@@ -334,7 +398,7 @@ export function registerDiscountCreateHandler(bot: Bot<BotContext>): void {
       return;
     }
 
-    // ── Step 4: expiry input → show confirmation ────────────────────────────
+    // ── Step 4: expiry input → ask for min purchase ─────────────────────────
     if (pending.kind === 'discount-expiry-input') {
       let expiresAt: Date | null;
       if (rawText === '-') {
@@ -348,22 +412,115 @@ export function registerDiscountCreateHandler(bot: Bot<BotContext>): void {
         expiresAt = new Date(Date.now() + days * 24 * 3600 * 1000);
       }
 
-      clearAdminPending(adminId);
-
       const expiryLabel = expiresAt ? formatDateIR(expiresAt) : 'بدون انقضا';
-      stashDiscountDraft(adminId, {
+      setAdminPending(adminId, {
+        kind: 'discount-min-purchase-input',
         code: pending.code,
         percentOff: pending.percentOff,
         maxUses: pending.maxUses,
         expiresAt,
       });
+      await ctx.reply(
+        `✅ انقضا: <b>${expiryLabel}</b>\n\n` +
+        `حداقل مبلغ خرید رو بفرست (به تومان).\n\n` +
+        `• یه عدد مثبت (مثلاً <code>500000</code>)\n` +
+        `• یا "-" برای بدون حداقل`,
+        { parse_mode: 'HTML', reply_markup: cancelPendingKeyboard() },
+      );
+      return;
+    }
 
+    // ── Step 5: min purchase input → ask for user-specific ──────────────────
+    if (pending.kind === 'discount-min-purchase-input') {
+      let minPurchase: bigint | null;
+      if (rawText === '-') {
+        minPurchase = null;
+      } else {
+        const n = parseInt(normalizePersianDigits(rawText), 10);
+        if (!Number.isFinite(n) || n < 1) {
+          await ctx.reply('❌ عدد نامعتبر. یه عدد مثبت بفرست یا "-" برای بدون حداقل.');
+          return;
+        }
+        minPurchase = BigInt(n);
+      }
+
+      const minLabel = minPurchase ? formatToman(minPurchase) : 'بدون حداقل';
+      setAdminPending(adminId, {
+        kind: 'discount-user-input',
+        code: pending.code,
+        percentOff: pending.percentOff,
+        maxUses: pending.maxUses,
+        expiresAt: pending.expiresAt,
+        minPurchase,
+      });
+      await ctx.reply(
+        `✅ حداقل خرید: <b>${minLabel}</b>\n\n` +
+        `آیا این کد برای کاربر خاصی ـه؟`,
+        {
+          parse_mode: 'HTML',
+          reply_markup: new InlineKeyboard()
+            .text('👤 بله — برای یه کاربر خاص', 'admin:discount:for-user').row()
+            .text('👥 خیر — برای همه', 'admin:discount:for-all'),
+        },
+      );
+      return;
+    }
+
+    // ── Step 6: user ID or username text input ──────────────────────────────
+    if (pending.kind === 'discount-user-id-input') {
+      const input = normalizePersianDigits(rawText);
+      let targetUser: { id: bigint; username: string | null; firstName: string | null } | null = null;
+
+      if (/^\d+$/.test(input)) {
+        targetUser = await prisma.user.findUnique({
+          where: { id: BigInt(input) },
+          select: { id: true, username: true, firstName: true },
+        });
+      } else if (/^@?[a-zA-Z0-9_]+$/.test(input)) {
+        const uname = input.replace(/^@/, '');
+        targetUser = await prisma.user.findFirst({
+          where: { username: { equals: uname, mode: 'insensitive' } },
+          select: { id: true, username: true, firstName: true },
+        });
+      } else {
+        await ctx.reply('❌ آی‌دی یا یوزرنیم نامعتبر. دوباره بفرست:');
+        return;
+      }
+
+      if (!targetUser) {
+        await ctx.reply('❌ کاربری با این مشخصات پیدا نشد. دوباره بفرست:');
+        return;
+      }
+
+      let userLabel: string;
+      if (targetUser.username) {
+        userLabel = `@${targetUser.username}`;
+      } else if (targetUser.firstName) {
+        userLabel = escapeHtml(targetUser.firstName);
+      } else {
+        userLabel = `#${targetUser.id.toString().slice(-4)}`;
+      }
+
+      clearAdminPending(adminId);
+      stashDiscountDraft(adminId, {
+        code: pending.code,
+        percentOff: pending.percentOff,
+        maxUses: pending.maxUses,
+        expiresAt: pending.expiresAt,
+        minPurchase: pending.minPurchase,
+        onlyForUserId: targetUser.id,
+      });
+
+      const expiryLabel = pending.expiresAt ? formatDateIR(pending.expiresAt) : 'بدون انقضا';
+      const minLabel = pending.minPurchase ? formatToman(pending.minPurchase) : 'بدون حداقل';
       await ctx.reply(
         `📋 <b>خلاصه کد تخفیف:</b>\n\n` +
         `• کد: <code>${pending.code}</code>\n` +
         `• درصد: <b>${pending.percentOff}٪</b>\n` +
+        `• حداقل خرید: ${minLabel}\n` +
         `• حداکثر استفاده: ${pending.maxUses === null ? 'نامحدود' : pending.maxUses}\n` +
-        `• انقضا: ${expiryLabel}\n\n` +
+        `• انقضا: ${expiryLabel}\n` +
+        `• مخصوص کاربر: ${userLabel}\n\n` +
         `تأیید می‌کنی؟`,
         {
           parse_mode: 'HTML',

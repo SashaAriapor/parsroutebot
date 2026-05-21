@@ -1,18 +1,27 @@
 import { type Prisma } from '@prisma/client';
 import { prisma } from '@/db/client';
+import { formatToman } from '@/lib/format';
 
 type ValidateResult =
   | { ok: true; percentOff: number; id: number }
   | { ok: false; reason: string };
 
 export const discountService = {
-  async validate(code: string, userId: bigint): Promise<ValidateResult> {
+  async validate(
+    code: string,
+    userId: bigint,
+    planId: number | null,
+    purchaseAmountToman: bigint,
+  ): Promise<ValidateResult> {
     const dc = await prisma.discountCode.findUnique({ where: { code } });
     if (!dc) return { ok: false, reason: 'این کد تخفیف وجود نداره.' };
     if (!dc.isActive) return { ok: false, reason: 'این کد تخفیف غیرفعاله.' };
     if (dc.expiresAt && dc.expiresAt < new Date()) return { ok: false, reason: 'این کد تخفیف منقضی شده.' };
     if (dc.maxUses != null && dc.usedCount >= dc.maxUses) return { ok: false, reason: 'سقف استفاده از این کد پر شده.' };
     if (dc.onlyForUserId != null && dc.onlyForUserId !== userId) return { ok: false, reason: 'این کد برای حساب شما نیست.' };
+    if (dc.minPurchaseToman && purchaseAmountToman < dc.minPurchaseToman) {
+      return { ok: false, reason: `این کد تخفیف فقط برای خرید بالای ${formatToman(dc.minPurchaseToman)} فعاله.` };
+    }
     return { ok: true, percentOff: dc.percentOff, id: dc.id };
   },
 

@@ -6,10 +6,18 @@ export function gbPickerKeyboard(
   quickPicks: Array<{ gb: number; price: bigint }>,
 ): InlineKeyboard {
   const kb = new InlineKeyboard();
-  for (const p of quickPicks) {
-    kb.text(`📦 ${formatGB(p.gb)} — ${formatToman(p.price)}`, `buy:gb:${p.gb}`).row();
+  for (let i = 0; i < quickPicks.length; i += 2) {
+    const a = quickPicks[i];
+    const b = quickPicks[i + 1];
+    if (b) {
+      kb.text(`📦 ${formatGB(a.gb)} — ${formatToman(a.price)}`, `buy:gb:${a.gb}`)
+        .text(`📦 ${formatGB(b.gb)} — ${formatToman(b.price)}`, `buy:gb:${b.gb}`)
+        .row();
+    } else {
+      kb.text(`📦 ${formatGB(a.gb)} — ${formatToman(a.price)}`, `buy:gb:${a.gb}`).row();
+    }
   }
-  kb.text('✏️ حجم دلخواه', 'buy:custom-gb').row();
+  kb.text('✏️ مقدار دلخواه', 'buy:custom-gb').row();
   kb.text('❌ انصراف', 'buy:cancel');
   return kb;
 }

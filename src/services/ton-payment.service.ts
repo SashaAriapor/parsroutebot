@@ -4,6 +4,7 @@ import { redis } from '@/db/redis';
 import { tonClient } from '@/adapters/ton';
 import { fxClient } from '@/adapters/fx';
 import { tonInvoiceService } from './ton-invoice.service';
+import { generatePasarGuardUsername } from '@/adapters/pasarguard';
 import { config } from '@/lib/config';
 import { logger } from '@/lib/logger';
 import type { TonTx } from '@/adapters/ton/ton.interface';
@@ -200,13 +201,12 @@ async function matchOrder(payment: TonPaymentRow, tx: TonTx, orderIdPrefix: stri
     });
   });
 
-  logger.info({ orderId: order.id, txHash: tx.hash }, 'Order paid via TON — triggering fulfillment');
+  logger.info({ orderId: order.id, txHash: tx.hash }, 'Order paid via TON — asking user for account name');
 
-  const { orderFulfillmentService } = await import('./order-fulfillment.service');
-  const fulfillResult = await orderFulfillmentService.fulfill(order.id);
-  if (!fulfillResult.ok) {
-    logger.error({ orderId: order.id, reason: fulfillResult.reason }, 'TON order fulfillment failed');
-  }
+  const generatedName = generatePasarGuardUsername();
+  const { setUserPending } = await import('@/bot/state/pending-user-input');
+  setUserPending(Number(order.userId), { kind: 'account-name-input', orderId: order.id, generatedName });
+  await askUserForAccountName(Number(order.userId));
 
   return 'matched';
 }
@@ -232,6 +232,21 @@ async function markOrphaned(paymentId: string): Promise<void> {
 }
 
 // ─── Notification helpers ─────────────────────────────────────────────────────
+
+async function askUserForAccountName(userId: number): Promise<void> {
+  const { bot } = await import('@/bot');
+  const text =
+    `✅ پرداخت تأیید شد!\n\n` +
+    `یه اسم برای اکانتت انتخاب کن:\n\n` +
+    `⚠️ فقط حروف انگلیسی و عدد — بدون فاصله یا کاراکتر خاص\n` +
+    `مثال: john123 یا myaccount\n\n` +
+    `برای اسم خودکار، فقط — بفرست`;
+  try {
+    await bot.api.sendMessage(userId, text);
+  } catch (err) {
+    logger.warn({ err, userId }, 'Failed to ask user for account name');
+  }
+}
 
 async function notifyUserTopup(userId: bigint, amountToman: bigint, amountTon: number): Promise<void> {
   const { bot } = await import('@/bot');

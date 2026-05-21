@@ -11,7 +11,16 @@ function statsMenuKeyboard(): InlineKeyboard {
     .row()
     .text('🏆 مشتری‌های برتر', 'admin:stats:top:spent')
     .row()
+    .text('🏆 برترین معرفی‌کننده‌ها', 'admin:stats:top-referrers')
+    .row()
     .text('⬅️ بازگشت', 'admin:back');
+}
+
+function topReferrersKeyboard(): InlineKeyboard {
+  return new InlineKeyboard()
+    .text('🔄 به‌روزرسانی', 'admin:stats:top-referrers')
+    .row()
+    .text('⬅️ بازگشت', 'admin:stats');
 }
 
 function overallKeyboard(orphans: number): InlineKeyboard {
@@ -66,6 +75,29 @@ function formatOverall(data: Awaited<ReturnType<typeof adminStatsService.getOver
   );
 }
 
+function formatTopReferrers(
+  referrers: Awaited<ReturnType<typeof adminStatsService.getTopReferrers>>,
+): string {
+  if (referrers.length === 0) {
+    return `🏆 <b>برترین معرفی‌کننده‌ها:</b>\n\nهنوز معرفی موفقی ثبت نشده`;
+  }
+
+  const lines = referrers.map((r, i) => {
+    let display: string;
+    if (r.username) {
+      display = `@${escapeHtml(r.username)}`;
+    } else if (r.firstName) {
+      display = escapeHtml(r.firstName);
+    } else {
+      const last4 = r.referrerId.toString().slice(-4);
+      display = `کاربر #${last4}`;
+    }
+    return `${i + 1}. ${display} — ${r.count} نفر`;
+  });
+
+  return `🏆 <b>برترین معرفی‌کننده‌ها:</b>\n\n` + lines.join('\n');
+}
+
 function formatTopCustomers(
   customers: Awaited<ReturnType<typeof adminStatsService.getTopCustomers>>,
   sortBy: 'spent' | 'count',
@@ -111,10 +143,23 @@ export function registerAdminStatsHandler(bot: Bot<BotContext>): void {
 
   admin.callbackQuery('admin:stats:overall', adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
-    const data = await adminStatsService.getOverall();
-    await ctx.editMessageText(formatOverall(data), {
+    const [data, topReferrers] = await Promise.all([
+      adminStatsService.getOverall(),
+      adminStatsService.getTopReferrers(),
+    ]);
+    const text = formatOverall(data) + '\n\n' + formatTopReferrers(topReferrers);
+    await ctx.editMessageText(text, {
       parse_mode: 'HTML',
       reply_markup: overallKeyboard(data.ton.orphans),
+    });
+  });
+
+  admin.callbackQuery('admin:stats:top-referrers', adminMiddleware, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const topReferrers = await adminStatsService.getTopReferrers();
+    await ctx.editMessageText(formatTopReferrers(topReferrers), {
+      parse_mode: 'HTML',
+      reply_markup: topReferrersKeyboard(),
     });
   });
 
@@ -123,8 +168,11 @@ export function registerAdminStatsHandler(bot: Bot<BotContext>): void {
     await ctx.answerCallbackQuery();
     const raw = ctx.callbackQuery.data;
     const sortBy: 'spent' | 'count' = raw.endsWith(':count') ? 'count' : 'spent';
-    const customers = await adminStatsService.getTopCustomers(sortBy);
-    const text = formatTopCustomers(customers, sortBy);
+    const [customers, topReferrers] = await Promise.all([
+      adminStatsService.getTopCustomers(sortBy),
+      adminStatsService.getTopReferrers(),
+    ]);
+    const text = formatTopCustomers(customers, sortBy) + '\n\n' + formatTopReferrers(topReferrers);
     const kb = customers.length === 0 ? topBackKeyboard() : topKeyboard(sortBy);
     await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
   });

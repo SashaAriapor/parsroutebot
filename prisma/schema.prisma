@@ -299,6 +299,7 @@ model DiscountCode {
   expiresAt     DateTime?
   onlyForUserId BigInt?
   isActive      Boolean  @default(true)
+  minPurchaseToman BigInt?
 
   createdAt DateTime @default(now())
   createdBy BigInt?

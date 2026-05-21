@@ -12,10 +12,10 @@ import { generateQRBuffer } from '@/lib/qrcode';
 
 type FulfillResult =
   | { ok: true; configId: number; subscriptionUrl: string }
-  | { ok: false; reason: string };
+  | { ok: false; reason: string; nameTaken?: true };
 
 export const orderFulfillmentService = {
-  async fulfill(orderId: string): Promise<FulfillResult> {
+  async fulfill(orderId: string, username?: string): Promise<FulfillResult> {
     const order = await prisma.order.findUnique({ where: { id: orderId } });
     if (!order) {
       logger.error({ orderId }, 'fulfill: order not found');
@@ -36,7 +36,7 @@ export const orderFulfillmentService = {
       return { ok: false, reason: 'server is inactive' };
     }
 
-    const pgUsername = generatePasarGuardUsername();
+    const pgUsername = username ?? generatePasarGuardUsername();
     const expireAt = order.durationDays > 0
       ? new Date(Date.now() + order.durationDays * 86400_000)
       : null;
@@ -49,6 +49,10 @@ export const orderFulfillmentService = {
         expireAt,
       });
     } catch (err) {
+      const errMsg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+      if (errMsg.includes('409') || errMsg.includes('conflict') || errMsg.includes('already') || errMsg.includes('exist') || errMsg.includes('duplicate')) {
+        return { ok: false, reason: 'username taken', nameTaken: true };
+      }
       logger.error({ err, orderId }, 'PasarGuard user creation failed during fulfillment');
       return { ok: false, reason: 'PasarGuard user creation failed' };
     }
@@ -115,6 +119,7 @@ export const orderFulfillmentService = {
     await notifyUserFulfilled({
       userId: order.userId,
       configId,
+      accountName: pgUser.username,
       trafficGB: order.trafficGB,
       durationDays: order.durationDays,
       subscriptionUrl,
@@ -143,6 +148,7 @@ export const orderFulfillmentService = {
 async function notifyUserFulfilled(params: {
   userId: bigint;
   configId: number;
+  accountName: string;
   trafficGB: number;
   durationDays: number;
   subscriptionUrl: string;
@@ -156,6 +162,7 @@ async function notifyUserFulfilled(params: {
   const text =
     `✅ <b>سرویس جدیدت آماده شد!</b>\n\n` +
     `🛡️ سرویس #${params.configId}\n` +
+    `👤 نام اکانت: <code>${escapeHtml(params.accountName)}</code>\n` +
     `📍 ${params.serverFlag ?? ''}${escapeHtml(params.serverName)}\n` +
     `📦 ${formatGB(params.trafficGB)}  •  ${params.durationDays} روز` +
     (expiryDate ? `\n📅 انقضا: ${formatDateIR(expiryDate)}` : '') +

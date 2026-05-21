@@ -85,4 +85,34 @@ export const adminStatsService = {
       },
     });
   },
+
+  async getTopReferrers(limit = 10) {
+    const rows = await prisma.referral.groupBy({
+      by: ['referrerId'],
+      where: {
+        referee: {
+          orders: { some: { status: 'COMPLETED' } },
+        },
+      },
+      _count: { refereeId: true },
+      orderBy: { _count: { refereeId: 'desc' } },
+      take: limit,
+    });
+
+    if (rows.length === 0) return [];
+
+    const users = await prisma.user.findMany({
+      where: { id: { in: rows.map(r => r.referrerId) } },
+      select: { id: true, username: true, firstName: true },
+    });
+
+    const byId = new Map(users.map(u => [u.id.toString(), u]));
+
+    return rows.map(r => ({
+      referrerId: r.referrerId,
+      count: r._count.refereeId,
+      username: byId.get(r.referrerId.toString())?.username ?? null,
+      firstName: byId.get(r.referrerId.toString())?.firstName ?? null,
+    }));
+  },
 };
