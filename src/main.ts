@@ -23,6 +23,13 @@ async function main() {
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
   await bot.start({
+    allowed_updates: [
+      'message',
+      'callback_query',
+      'message_reaction',
+      'my_chat_member',
+      'chat_member',
+    ],
     onStart: (botInfo) => {
       logger.info({ username: botInfo.username }, 'Bot is running');
     },

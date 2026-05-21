@@ -17,30 +17,19 @@ export function registerAccountNameHandler(bot: Bot<BotContext>): void {
 
     const input = ctx.message.text.trim();
 
-    if (input === '-') {
-      clearUserPending(ctx.from.id);
-      await ctx.reply('⏳ در حال ساخت اکانت...');
-      const { orderFulfillmentService } = await import('@/services/order-fulfillment.service');
-      const result = await orderFulfillmentService.fulfill(pending.orderId, pending.generatedName);
-      if (!result.ok) {
-        logger.error({ orderId: pending.orderId, reason: result.reason }, 'Fulfillment failed after auto name selected');
-        await ctx.reply('❌ خطایی در ساخت سرویس پیش اومد. با پشتیبانی تماس بگیر.');
-      }
-      return;
-    }
-
-    if (!NAME_REGEX.test(input) || input.length > MAX_NAME_LENGTH) {
+    if (input !== '-' && (!NAME_REGEX.test(input) || input.length > MAX_NAME_LENGTH)) {
       await ctx.reply(
         'اسم وارد شده قابل قبول نیست.\nفقط حروف انگلیسی و عدد مجاز است، بدون فاصله.\nدوباره بفرست:',
       );
       return;
     }
 
+    const chosenName = input === '-' ? pending.generatedName : input;
     clearUserPending(ctx.from.id);
     await ctx.reply('⏳ در حال ساخت اکانت...');
 
-    const { orderFulfillmentService } = await import('@/services/order-fulfillment.service');
-    const result = await orderFulfillmentService.fulfill(pending.orderId, input);
+    const { orderFulfillmentService, markOrderFailed } = await import('@/services/order-fulfillment.service');
+    const result = await orderFulfillmentService.fulfill(pending.orderId, chosenName);
 
     if (!result.ok) {
       if (result.nameTaken) {
@@ -48,8 +37,26 @@ export function registerAccountNameHandler(bot: Bot<BotContext>): void {
         await ctx.reply('این اسم قبلاً انتخاب شده، یه اسم دیگه بفرست:');
         return;
       }
-      logger.error({ orderId: pending.orderId, reason: result.reason }, 'Fulfillment failed after custom name input');
-      await ctx.reply('❌ خطایی در ساخت سرویس پیش اومد. با پشتیبانی تماس بگیر.');
+
+      const retryCount = pending.retryCount ?? 0;
+
+      if (result.retryable && retryCount < 1) {
+        // Fix 3: temporary failure — let user retry once
+        setUserPending(ctx.from.id, { ...pending, retryCount: retryCount + 1 });
+        logger.warn({ orderId: pending.orderId, retryCount, reason: result.reason }, 'Fulfillment failed (retryable), prompting user to retry');
+        await ctx.reply(
+          '⚠️ سرور موقتاً در دسترس نیست. لطفاً چند ثانیه صبر کن و دوباره اسم رو بفرست.',
+        );
+        return;
+      }
+
+      // Fix 4: permanent failure or retry exhausted
+      logger.error({ orderId: pending.orderId, retryCount, reason: result.reason }, 'Fulfillment failed permanently, marking order failed');
+      const { refunded } = await markOrderFailed(pending.orderId);
+      const msg = refunded
+        ? '❌ متأسفانه ساخت سرویس با خطا مواجه شد و مبلغ به کیف پولت برگشت.\nلطفاً دوباره تلاش کن یا با پشتیبانی تماس بگیر.'
+        : '❌ متأسفانه ساخت سرویس با خطا مواجه شد.\nلطفاً دوباره از منو خرید کن یا با پشتیبانی تماس بگیر.';
+      await ctx.reply(msg);
     }
   });
 }

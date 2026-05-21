@@ -1,16 +1,18 @@
 import axios, { type AxiosInstance } from 'axios';
 import { getProxyAgent } from '@/lib/proxy';
 
-function createAxiosInstance(options: { timeout?: number } = {}): AxiosInstance {
+function createAxiosInstance(options: { timeout?: number; direct?: boolean } = {}): AxiosInstance {
   const instance = axios.create({
     timeout: options.timeout ?? 15_000,
   });
 
-  const agent = getProxyAgent();
-  if (agent) {
-    instance.defaults.httpsAgent = agent;
-    instance.defaults.httpAgent = agent;
-    instance.defaults.proxy = false;
+  if (!options.direct) {
+    const agent = getProxyAgent();
+    if (agent) {
+      instance.defaults.httpsAgent = agent;
+      instance.defaults.httpAgent = agent;
+      instance.defaults.proxy = false;
+    }
   }
 
   return instance;
@@ -18,6 +20,6 @@ function createAxiosInstance(options: { timeout?: number } = {}): AxiosInstance 
 
 export const httpClient = createAxiosInstance();
 
-export function createHttpClient(timeout: number): AxiosInstance {
-  return createAxiosInstance({ timeout });
+export function createHttpClient(timeout: number, opts?: { direct?: boolean }): AxiosInstance {
+  return createAxiosInstance({ timeout, direct: opts?.direct });
 }

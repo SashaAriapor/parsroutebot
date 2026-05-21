@@ -27,11 +27,14 @@ enum OrderStatus {
   EXPIRED
   CANCELLED
   FAILED
+  PENDING_CARD_APPROVAL
+  CARD_REJECTED
 }
 
 enum PaymentMethod {
   WALLET
   TON
+  CARD
 }
 
 enum ConfigStatus {
@@ -222,6 +225,9 @@ model Order {
 
   configId Int? @unique
 
+  cardReceiptMessageId Int?
+  cardFeePercent       Int?
+
   createdAt   DateTime  @default(now())
   paidAt      DateTime?
   completedAt DateTime?
@@ -305,6 +311,12 @@ model DiscountCode {
   createdBy BigInt?
 
   @@index([code, isActive])
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
 }
 
 model AdminAction {

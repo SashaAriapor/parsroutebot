@@ -43,6 +43,7 @@ export function summaryKeyboard(): InlineKeyboard {
   return new InlineKeyboard()
     .text('💰 پرداخت از کیف پول', 'buy:pay:wallet').row()
     .text('🪙 پرداخت با TON', 'buy:pay:ton').row()
+    .text('💳 پرداخت کارت به کارت', 'buy:pay:card').row()
     .text('⬅️ بازگشت', 'buy:back-to-discount').row()
     .text('❌ انصراف', 'buy:cancel');
 }

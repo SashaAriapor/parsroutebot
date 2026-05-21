@@ -9,6 +9,7 @@ import { formatToman, formatGB, formatDateIR } from '@/lib/format';
 import { generateQRBuffer } from '@/lib/qrcode';
 import { buyService } from '@/services/buy.service';
 import { discountService } from '@/services/discount.service';
+import { settingsService } from '@/services/settings.service';
 import { generatePasarGuardUsername } from '@/adapters/pasarguard';
 import { setUserPending } from '@/bot/state/pending-user-input';
 import { type BuyState, getBuyState, setBuyState, clearBuyState } from '../state/pending-buy-state';
@@ -604,7 +605,7 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
 
       await ctx.answerCallbackQuery({ text: '⏳ در حال پردازش...' });
 
-      const result = await buyService.createPaidWalletOrder({
+      const result = await buyService.createPendingWalletOrder({
         userId: BigInt(userId),
         serverId: state.serverId,
         trafficGB: state.trafficGB,
@@ -631,12 +632,79 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
       setUserPending(userId, { kind: 'account-name-input', orderId: result.orderId, generatedName });
 
       await ctx.editMessageText(
-        `✅ پرداخت انجام شد!\n\n` +
+        `✅ سفارش ثبت شد!\n\n` +
         `یه اسم برای اکانتت انتخاب کن:\n\n` +
         `⚠️ فقط حروف انگلیسی و عدد — بدون فاصله یا کاراکتر خاص\n` +
         `مثال: john123 یا myaccount\n\n` +
         `برای اسم خودکار، فقط — بفرست`,
       );
+      return;
+    }
+
+    // ── Card payment ──────────────────────────────────────────────────────────
+    if (data === 'buy:pay:card') {
+      const state = getBuyState(userId);
+      if (!state?.trafficGB || !state.serverId || !state.pricePerGB || state.finalPriceToman == null) {
+        clearBuyState(userId);
+        await ctx.editMessageText('❌ اطلاعات سفارش منقضی شده. لطفاً دوباره شروع کن.');
+        await ctx.answerCallbackQuery();
+        return;
+      }
+
+      await ctx.answerCallbackQuery({ text: '⏳ در حال بارگذاری...' });
+
+      const cardSettings = await settingsService.getCardSettings();
+      if (!cardSettings.cardNumber || !cardSettings.channelId) {
+        await ctx.editMessageText('❌ پرداخت کارت به کارت در حال حاضر فعال نیست. لطفاً روش دیگه‌ای انتخاب کن.');
+        return;
+      }
+
+      const result = await buyService.createPendingCardOrder({
+        userId: BigInt(userId),
+        serverId: state.serverId,
+        trafficGB: state.trafficGB,
+        durationDays: state.durationDays!,
+        pricePerGB: state.pricePerGB,
+        discountCode: state.discountCode,
+        finalPriceToman: state.finalPriceToman,
+        cardFeePercent: cardSettings.feePercent,
+      });
+
+      if (!result.ok) {
+        const msgMap: Record<string, string> = {
+          INVALID_DISCOUNT: `❌ کد تخفیف منقضی شده: ${result.reason}`,
+          SERVER_INACTIVE: '❌ این سرور دیگه فعال نیست.',
+          UNKNOWN: '❌ خطا در ثبت سفارش.',
+        };
+        await ctx.editMessageText(msgMap[result.code] ?? '❌ خطا در ثبت سفارش.');
+        clearBuyState(userId);
+        return;
+      }
+
+      clearBuyState(userId);
+      setUserPending(userId, { kind: 'card-receipt-input', orderId: result.orderId });
+
+      const feeAmount = result.priceWithFee - state.finalPriceToman;
+      const cardNumFormatted = cardSettings.cardNumber.replace(/(\d{4})(?=\d)/g, '$1-');
+
+      const text = [
+        '💳 <b>پرداخت کارت به کارت</b>',
+        '',
+        `📦 ${formatGB(state.trafficGB!)} — ${state.durationDays!} روز`,
+        `💰 مبلغ پایه: ${formatToman(state.finalPriceToman)}`,
+        `🔖 کارمزد (${cardSettings.feePercent}٪): +${formatToman(feeAmount)}`,
+        '━━━━━━━━━━━━━━',
+        `💳 مبلغ قابل پرداخت: <b>${formatToman(result.priceWithFee)}</b>`,
+        '',
+        '💳 <b>شماره کارت:</b>',
+        `<code>${cardNumFormatted}</code>`,
+        cardSettings.cardOwner ? `👤 به نام: <b>${escapeHtml(cardSettings.cardOwner)}</b>` : '',
+        '',
+        '⚠️ دقیقاً این مبلغ را واریز کن.',
+        'بعد از پرداخت، <b>عکس رسید</b> را همینجا ارسال کن.',
+      ].filter(Boolean).join('\n');
+
+      await ctx.editMessageText(text, { parse_mode: 'HTML' });
       return;
     }
 

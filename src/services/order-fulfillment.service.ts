@@ -1,4 +1,4 @@
-import { OrderStatus } from '@prisma/client';
+import { OrderStatus, WalletTxType } from '@prisma/client';
 import { InputFile } from 'grammy';
 import { prisma } from '@/db/client';
 import { pasarguardClient, generatePasarGuardUsername, gbToBytes, extractSubToken } from '@/adapters/pasarguard';
@@ -12,7 +12,7 @@ import { generateQRBuffer } from '@/lib/qrcode';
 
 type FulfillResult =
   | { ok: true; configId: number; subscriptionUrl: string }
-  | { ok: false; reason: string; nameTaken?: true };
+  | { ok: false; reason: string; nameTaken?: true; retryable?: true };
 
 export const orderFulfillmentService = {
   async fulfill(orderId: string, username?: string): Promise<FulfillResult> {
@@ -21,8 +21,13 @@ export const orderFulfillmentService = {
       logger.error({ orderId }, 'fulfill: order not found');
       return { ok: false, reason: 'order not found' };
     }
-    if (order.status !== OrderStatus.PAID) {
-      logger.warn({ orderId, status: order.status }, 'fulfill: order not in PAID status');
+
+    const isPendingWallet =
+      order.status === OrderStatus.PENDING && order.paymentMethod === 'WALLET';
+    const isPaid = order.status === OrderStatus.PAID;
+
+    if (!isPendingWallet && !isPaid) {
+      logger.warn({ orderId, status: order.status }, 'fulfill: order not in fulfillable status');
       return { ok: false, reason: `order status is ${order.status}` };
     }
 
@@ -41,6 +46,7 @@ export const orderFulfillmentService = {
       ? new Date(Date.now() + order.durationDays * 86400_000)
       : null;
 
+    // 1. Create PasarGuard account FIRST (before any DB money movement)
     let pgUser: PasarGuardUser;
     try {
       pgUser = await pasarguardClient.createUser({
@@ -53,19 +59,48 @@ export const orderFulfillmentService = {
       if (errMsg.includes('409') || errMsg.includes('conflict') || errMsg.includes('already') || errMsg.includes('exist') || errMsg.includes('duplicate')) {
         return { ok: false, reason: 'username taken', nameTaken: true };
       }
+      const isRetryable = errMsg.includes('timeout') || errMsg.includes('request failed') || errMsg.includes('econnaborted');
       logger.error({ err, orderId }, 'PasarGuard user creation failed during fulfillment');
-      return { ok: false, reason: 'PasarGuard user creation failed' };
+      return isRetryable
+        ? { ok: false as const, reason: 'PasarGuard user creation failed', retryable: true as const }
+        : { ok: false as const, reason: 'PasarGuard user creation failed' };
     }
 
     let configId: number;
     let subscriptionUrl: string;
 
+    // 2. THEN deduct wallet (for wallet orders) + create config atomically
     try {
       const result = await prisma.$transaction(async (tx) => {
-        // Guard against concurrent fulfillment
         const freshOrder = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
-        if (freshOrder.status !== OrderStatus.PAID) {
-          throw Object.assign(new Error('ORDER_NOT_PAID'), { code: 'ORDER_NOT_PAID' });
+        const stillFulfillable =
+          freshOrder.status === OrderStatus.PAID ||
+          (freshOrder.status === OrderStatus.PENDING && freshOrder.paymentMethod === 'WALLET');
+        if (!stillFulfillable) {
+          throw Object.assign(new Error('ORDER_STATE_CHANGED'), { code: 'ORDER_STATE_CHANGED' });
+        }
+
+        // For pending wallet orders: deduct balance inside the same transaction
+        if (isPendingWallet) {
+          const freshUser = await tx.user.findUniqueOrThrow({ where: { id: order.userId } });
+          if (freshUser.walletBalance < order.priceToman) {
+            throw Object.assign(new Error('INSUFFICIENT_BALANCE_RACE'), { code: 'INSUFFICIENT_BALANCE' });
+          }
+          const newBalance = freshUser.walletBalance - order.priceToman;
+          await tx.user.update({
+            where: { id: order.userId },
+            data: { walletBalance: newBalance },
+          });
+          await tx.walletTransaction.create({
+            data: {
+              userId: order.userId,
+              type: WalletTxType.PURCHASE,
+              amountToman: -order.priceToman,
+              balanceAfter: newBalance,
+              orderId: order.id,
+              description: `خرید ${order.trafficGB} گیگابایت`,
+            },
+          });
         }
 
         const cfg = await tx.vpnConfig.create({
@@ -85,7 +120,12 @@ export const orderFulfillmentService = {
 
         await tx.order.update({
           where: { id: orderId },
-          data: { status: OrderStatus.COMPLETED, configId: cfg.id, completedAt: new Date() },
+          data: {
+            status: OrderStatus.COMPLETED,
+            configId: cfg.id,
+            completedAt: new Date(),
+            paidAt: isPendingWallet ? new Date() : undefined,
+          },
         });
 
         await tx.user.update({
@@ -144,6 +184,39 @@ export const orderFulfillmentService = {
     return { ok: true, configId, subscriptionUrl };
   },
 };
+
+// Mark an order FAILED and, for already-PAID orders (TON/card), refund priceToman to wallet.
+// For PENDING wallet orders, the balance was never deducted so no refund is needed.
+export async function markOrderFailed(orderId: string): Promise<{ refunded: boolean }> {
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!order) return { refunded: false };
+
+  if (order.status === OrderStatus.PAID) {
+    await prisma.$transaction(async (tx) => {
+      await tx.order.update({ where: { id: orderId }, data: { status: OrderStatus.FAILED } });
+      const user = await tx.user.findUniqueOrThrow({ where: { id: order.userId } });
+      const newBalance = user.walletBalance + order.priceToman;
+      await tx.user.update({ where: { id: order.userId }, data: { walletBalance: newBalance } });
+      await tx.walletTransaction.create({
+        data: {
+          userId: order.userId,
+          type: WalletTxType.REFUND,
+          amountToman: order.priceToman,
+          balanceAfter: newBalance,
+          orderId: order.id,
+          description: `بازگشت مبلغ سفارش ${order.id.slice(-6)}`,
+        },
+      });
+    });
+    logger.info({ orderId, userId: order.userId.toString() }, 'Order marked FAILED with wallet refund');
+    return { refunded: true };
+  }
+
+  // PENDING order (wallet payment awaiting fulfillment, or card/ton not yet processed)
+  await prisma.order.update({ where: { id: orderId }, data: { status: OrderStatus.FAILED } });
+  logger.info({ orderId }, 'Order marked FAILED (no wallet deduction to refund)');
+  return { refunded: false };
+}
 
 async function notifyUserFulfilled(params: {
   userId: bigint;

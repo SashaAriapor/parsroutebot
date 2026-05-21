@@ -54,6 +54,21 @@ type WalletOrderResult =
   | { ok: true; orderId: string }
   | { ok: false; reason: string; code: 'INSUFFICIENT_BALANCE' | 'SERVER_INACTIVE' | 'INVALID_DISCOUNT' | 'UNKNOWN' };
 
+type PendingCardOrderParams = {
+  userId: bigint;
+  serverId: number;
+  trafficGB: number;
+  durationDays: number;
+  pricePerGB: bigint;
+  discountCode?: string;
+  finalPriceToman: bigint;
+  cardFeePercent: number;
+};
+
+type PendingCardOrderResult =
+  | { ok: true; orderId: string; priceWithFee: bigint }
+  | { ok: false; reason: string; code: 'SERVER_INACTIVE' | 'INVALID_DISCOUNT' | 'UNKNOWN' };
+
 export const buyService = {
   async createPendingTonOrder(params: PendingTonOrderParams): Promise<PendingTonOrderResult> {
     const server = await prisma.server.findUnique({ where: { id: params.serverId } });
@@ -109,7 +124,47 @@ export const buyService = {
     };
   },
 
-  async createPaidWalletOrder(params: ExecuteParams): Promise<WalletOrderResult> {
+  async createPendingCardOrder(params: PendingCardOrderParams): Promise<PendingCardOrderResult> {
+    const server = await prisma.server.findUnique({ where: { id: params.serverId } });
+    if (!server) return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
+    if (!server.isActive) return { ok: false, reason: 'این سرور دیگه فعال نیست.', code: 'SERVER_INACTIVE' };
+
+    const basePriceToman = params.pricePerGB * BigInt(params.trafficGB);
+
+    if (params.discountCode) {
+      const dcCheck = await discountService.validate(params.discountCode, params.userId, null, basePriceToman);
+      if (!dcCheck.ok) return { ok: false, reason: dcCheck.reason, code: 'INVALID_DISCOUNT' };
+    }
+
+    const priceWithFee = (params.finalPriceToman * BigInt(100 + params.cardFeePercent)) / 100n;
+
+    const order = await prisma.$transaction(async (tx) => {
+      if (params.discountCode) {
+        await discountService.consume(tx, params.discountCode);
+      }
+
+      return tx.order.create({
+        data: {
+          userId: params.userId,
+          planId: null,
+          serverId: params.serverId,
+          trafficGB: params.trafficGB,
+          durationDays: params.durationDays,
+          pricePerGB: params.pricePerGB,
+          priceToman: priceWithFee,
+          discountCode: params.discountCode ?? null,
+          discountAmount: basePriceToman - params.finalPriceToman,
+          paymentMethod: 'CARD',
+          status: 'PENDING_CARD_APPROVAL',
+          cardFeePercent: params.cardFeePercent,
+        },
+      });
+    });
+
+    return { ok: true, orderId: order.id, priceWithFee };
+  },
+
+  async createPendingWalletOrder(params: ExecuteParams): Promise<WalletOrderResult> {
     const basePriceToman = params.pricePerGB * BigInt(params.trafficGB);
 
     const [user, server] = await Promise.all([
@@ -149,26 +204,7 @@ export const buyService = {
             discountCode: params.discountCode ?? null,
             discountAmount: basePriceToman - params.finalPriceToman,
             paymentMethod: PaymentMethod.WALLET,
-            status: OrderStatus.PAID,
-            paidAt: new Date(),
-          },
-        });
-
-        const newBalance = freshUser.walletBalance - params.finalPriceToman;
-
-        await tx.user.update({
-          where: { id: params.userId },
-          data: { walletBalance: newBalance },
-        });
-
-        await tx.walletTransaction.create({
-          data: {
-            userId: params.userId,
-            type: WalletTxType.PURCHASE,
-            amountToman: -params.finalPriceToman,
-            balanceAfter: newBalance,
-            orderId: order.id,
-            description: `خرید ${params.trafficGB} گیگابایت`,
+            status: OrderStatus.PENDING,
           },
         });
 

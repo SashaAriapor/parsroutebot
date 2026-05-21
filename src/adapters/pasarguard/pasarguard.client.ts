@@ -8,8 +8,15 @@ import type {
   PasarGuardUser,
 } from './pasarguard.interface';
 
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 2000;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export class PasarGuardClient implements IPasarGuardClient {
-  private readonly http = createHttpClient(15_000);
+  private readonly http = createHttpClient(15_000, { direct: true });
   private token: string | null = null;
   private tokenExpiresAt = 0;
 
@@ -53,35 +60,55 @@ export class PasarGuardClient implements IPasarGuardClient {
     method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     path: string,
     data?: unknown,
-    retried = false,
+    authRetried = false,
   ): Promise<T> {
     const headers = await this.getAuthHeader();
 
-    try {
-      const res = await this.http.request({
-        method,
-        url: path,
-        data,
-        headers,
-        validateStatus: () => true,
-      });
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const res = await this.http.request({
+          method,
+          url: path,
+          data,
+          headers,
+          validateStatus: () => true,
+        });
 
-      if (res.status === 401 && !retried) {
-        logger.warn('PasarGuard token expired, re-logging in');
-        this.token = null;
-        return this.request<T>(method, path, data, true);
+        if (res.status === 401 && !authRetried) {
+          logger.warn('PasarGuard token expired, re-logging in');
+          this.token = null;
+          return this.request<T>(method, path, data, true);
+        }
+
+        if (res.status >= 400) {
+          const msg = res.data?.detail ?? res.data?.msg ?? `HTTP ${res.status}`;
+          if (res.status >= 500 && attempt < MAX_RETRIES) {
+            logger.warn({ attempt, path, status: res.status }, `PasarGuard ${res.status}, retrying (${attempt}/${MAX_RETRIES})`);
+            await delay(RETRY_DELAY_MS * attempt);
+            continue;
+          }
+          throw new Error(`PasarGuard API error: ${msg}`);
+        }
+
+        return res.data;
+      } catch (err: any) {
+        if (err.message?.startsWith('PasarGuard API error')) throw err;
+
+        const isRetryable =
+          err.code === 'ECONNABORTED' ||
+          (err.message as string | undefined)?.toLowerCase().includes('timeout');
+
+        if (isRetryable && attempt < MAX_RETRIES) {
+          logger.warn({ attempt, path, err: err.message }, `PasarGuard timeout, retrying (${attempt}/${MAX_RETRIES})`);
+          await delay(RETRY_DELAY_MS * attempt);
+          continue;
+        }
+
+        throw new Error(`PasarGuard request failed: ${err.message}`);
       }
-
-      if (res.status >= 400) {
-        const msg = res.data?.detail ?? res.data?.msg ?? `HTTP ${res.status}`;
-        throw new Error(`PasarGuard API error: ${msg}`);
-      }
-
-      return res.data;
-    } catch (err: any) {
-      if (err.message.startsWith('PasarGuard API error')) throw err;
-      throw new Error(`PasarGuard request failed: ${err.message}`);
     }
+
+    throw new Error('PasarGuard request failed: max retries exceeded');
   }
 
   async createUser(params: CreateUserParams): Promise<PasarGuardUser> {

@@ -21,6 +21,7 @@ import { registerSupportReplyHandler } from './handlers/admin/support-reply.hand
 import { registerAdminUsersHandler } from './handlers/admin/users.handler';
 import { registerMyServicesHandler } from './handlers/my-services.handler';
 import { registerAccountNameHandler } from './handlers/account-name.handler';
+import { registerCardPaymentHandler } from './handlers/card-payment.handler';
 import { registerBuyHandler } from './handlers/buy.handler';
 import { registerInviteHandler } from './handlers/invite.handler';
 import { registerWalletHandler } from './handlers/wallet.handler';
@@ -86,6 +87,7 @@ export function createBot(): Bot<BotContext> {
   registerSupportReplyHandler(bot);
   registerAdminUsersHandler(bot); // message:text for admin input, before bot.hears
   registerAccountNameHandler(bot); // message:text for account name input, before bot.hears
+  registerCardPaymentHandler(bot); // message:photo/text for card receipt, message_reaction for approval
   registerBuyHandler(bot);   // message:text for discount input, before bot.hears
   registerWalletHandler(bot); // message:text for custom topup amount, before bot.hears
 

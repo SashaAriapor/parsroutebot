@@ -1,5 +1,6 @@
 export type UserInputAction =
-  | { kind: 'account-name-input'; orderId: string; generatedName: string };
+  | { kind: 'account-name-input'; orderId: string; generatedName: string; retryCount?: number }
+  | { kind: 'card-receipt-input'; orderId: string };
 
 type Pending = {
   action: UserInputAction;
