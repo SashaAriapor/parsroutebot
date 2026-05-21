@@ -84,6 +84,12 @@ const schema = z.object({
 
   TONAPI_KEY: z.string().optional(),
 
+  FX_FALLBACK_USDT_TOMAN: z
+    .string()
+    .default('90000')
+    .transform((val) => parseInt(val, 10))
+    .refine((n) => !isNaN(n) && n > 0, 'FX_FALLBACK_USDT_TOMAN must be a positive integer'),
+
   SOCKS5_HOST: z.string().optional(),
   SOCKS5_PORT: z
     .string()
