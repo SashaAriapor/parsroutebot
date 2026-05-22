@@ -22,6 +22,8 @@ import { registerAdminUsersHandler } from './handlers/admin/users.handler';
 import { registerMyServicesHandler } from './handlers/my-services.handler';
 import { registerAccountNameHandler } from './handlers/account-name.handler';
 import { registerCardPaymentHandler } from './handlers/card-payment.handler';
+import { channelGateMiddleware } from './middlewares/channel-gate.middleware';
+import { registerChannelGateHandler } from './handlers/channel-gate.handler';
 import { registerBuyHandler } from './handlers/buy.handler';
 import { registerInviteHandler } from './handlers/invite.handler';
 import { registerWalletHandler } from './handlers/wallet.handler';
@@ -81,6 +83,10 @@ export function createBot(): Bot<BotContext> {
 
   // Sync every non-bot user to DB before any handler runs.
   bot.use(userSyncMiddleware);
+
+  // Channel membership gate — blocks non-members until they join.
+  bot.use(channelGateMiddleware);
+  registerChannelGateHandler(bot);
 
   // Admin reply uses pending-state (not conversations) — register BEFORE
   // bot.hears handlers so its message:text listener has first pick.

@@ -11,6 +11,7 @@ function settingsKeyboard(): InlineKeyboard {
   return new InlineKeyboard()
     .text('🔄 به‌روزرسانی نرخ TON', 'admin:settings:refresh-fx').row()
     .text('💳 تنظیمات کارت به کارت', 'admin:settings:card').row()
+    .text('📢 قفل کانال', 'admin:settings:channel-gate').row()
     .text('⬅️ بازگشت', 'admin:back');
 }
 
@@ -20,6 +21,7 @@ function cardSettingsKeyboard(): InlineKeyboard {
     .text('✏️ نام صاحب کارت', 'admin:settings:card:owner').row()
     .text('✏️ آی‌دی چنل رسید', 'admin:settings:card:channel').row()
     .text('✏️ درصد کارمزد', 'admin:settings:card:fee').row()
+    .text('✏️ تاییدکننده‌های کارت', 'admin:settings:card:approvers').row()
     .text('⬅️ بازگشت', 'admin:settings');
 }
 
@@ -59,28 +61,82 @@ async function buildSettingsText(): Promise<string> {
 }
 
 async function buildCardSettingsText(): Promise<string> {
-  const { cardNumber, cardOwner, channelId, feePercent } = await settingsService.getCardSettings();
+  const { cardNumber, cardOwner, channelId, feePercent, approverIds } = await settingsService.getCardSettings();
   const numDisplay = cardNumber
     ? `<code>${cardNumber.replace(/(\d{4})(?=\d)/g, '$1-')}</code>`
+    : '⚠️ تنظیم نشده';
+  const approverDisplay = approverIds.length
+    ? approverIds.map((id) => `<code>${id}</code>`).join(', ')
     : '⚠️ تنظیم نشده';
   return (
     `💳 <b>تنظیمات کارت به کارت</b>\n\n` +
     `شماره کارت: ${numDisplay}\n` +
     `نام صاحب کارت: ${cardOwner || '⚠️ تنظیم نشده'}\n` +
     `چنل رسید: ${channelId ? `<code>${channelId}</code>` : '⚠️ تنظیم نشده'}\n` +
-    `کارمزد: <b>${feePercent}٪</b>`
+    `کارمزد: <b>${feePercent}٪</b>\n` +
+    `تاییدکننده‌ها: ${approverDisplay}`
   );
 }
+
+function channelGateKeyboard(): InlineKeyboard {
+  return new InlineKeyboard()
+    .text('✏️ آیدی کانال', 'admin:settings:channel-gate:id').row()
+    .text('✏️ یوزرنیم کانال', 'admin:settings:channel-gate:username').row()
+    .text('⬅️ بازگشت', 'admin:settings');
+}
+
+async function buildChannelGateText(): Promise<string> {
+  const [channelId, channelUsername] = await Promise.all([
+    settingsService.get('REQUIRED_CHANNEL_ID'),
+    settingsService.get('REQUIRED_CHANNEL_USERNAME'),
+  ]);
+  return (
+    `📢 <b>قفل کانال</b>\n\n` +
+    `آیدی کانال: ${channelId ? `<code>${channelId}</code>` : '⚠️ تنظیم نشده (غیرفعال)'}\n` +
+    `یوزرنیم کانال: ${channelUsername ? `<code>${channelUsername}</code>` : '⚠️ تنظیم نشده'}\n\n` +
+    `💡 برای غیرفعال کردن قفل، آیدی کانال رو خالی بذار.`
+  );
+}
+
+const CHANNEL_GATE_LABELS: Record<string, string> = {
+  REQUIRED_CHANNEL_ID: 'آیدی کانال (عدد منفی، مثلاً -1001234567890 — خالی = غیرفعال)',
+  REQUIRED_CHANNEL_USERNAME: 'یوزرنیم کانال (مثلاً @mychannel)',
+};
 
 const CARD_SETTING_LABELS: Record<string, string> = {
   card_number: 'شماره کارت (فقط عدد، بدون خط تیره)',
   card_owner: 'نام صاحب کارت',
   card_channel_id: 'آی‌دی چنل رسید (عدد منفی، مثلاً -1001234567890)',
   card_fee_percent: 'درصد کارمزد (عدد صحیح، مثلاً 15)',
+  card_approver_ids: 'آیدی تلگرام تاییدکننده‌ها (با کاما جدا کنید، مثال: 123456789,987654321)',
 };
 
 export function registerAdminSettingsHandler(bot: Bot<BotContext>): void {
   const admin = new Composer<BotContext>();
+
+  // ── Text input for channel gate settings ──────────────────────────────────
+  admin.on('message:text', adminMiddleware, async (ctx, next) => {
+    const pending = getAdminPending(ctx.from.id);
+    if (!pending || pending.kind !== 'channel-gate-setting-input') return next();
+
+    clearAdminPending(ctx.from.id);
+    const value = ctx.message.text.trim();
+
+    if (pending.settingKey === 'REQUIRED_CHANNEL_ID' && value !== '') {
+      const n = parseInt(value, 10);
+      if (isNaN(n) || n >= 0) {
+        await ctx.reply('❌ آیدی کانال باید یک عدد منفی باشه (مثلاً -1001234567890) یا خالی برای غیرفعال کردن.');
+        return;
+      }
+    }
+
+    await settingsService.set(pending.settingKey, value);
+    const text = await buildChannelGateText();
+    await ctx.reply(`✅ ${pending.label} ذخیره شد.\n\n` + text, {
+      parse_mode: 'HTML',
+      reply_markup: channelGateKeyboard(),
+    });
+  });
 
   // ── Text input for card settings ───────────────────────────────────────────
   admin.on('message:text', adminMiddleware, async (ctx, next) => {
@@ -105,6 +161,13 @@ export function registerAdminSettingsHandler(bot: Bot<BotContext>): void {
       const n = parseInt(value, 10);
       if (isNaN(n) || n >= 0) {
         await ctx.reply('❌ آی‌دی چنل باید یک عدد منفی باشه (مثلاً -1001234567890).');
+        return;
+      }
+    }
+    if (pending.settingKey === 'card_approver_ids' && value !== '') {
+      const ids = value.split(',').map((s) => s.trim());
+      if (!ids.every((id) => /^\d+$/.test(id))) {
+        await ctx.reply('❌ آیدی‌ها باید عدد صحیح و با کاما جدا باشند. مثال: 123456789,987654321');
         return;
       }
     }
@@ -140,13 +203,28 @@ export function registerAdminSettingsHandler(bot: Bot<BotContext>): void {
     await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: cardSettingsKeyboard() });
   });
 
-  admin.callbackQuery(/^admin:settings:card:(number|owner|channel|fee)$/, adminMiddleware, async (ctx) => {
+  admin.callbackQuery(/^admin:settings:card:(number|owner|channel|fee|approvers)$/, adminMiddleware, async (ctx) => {
     await ctx.answerCallbackQuery();
-    const sub = ctx.match[1] as 'number' | 'owner' | 'channel' | 'fee';
-    const keyMap = { number: 'card_number', owner: 'card_owner', channel: 'card_channel_id', fee: 'card_fee_percent' };
+    const sub = ctx.match[1] as 'number' | 'owner' | 'channel' | 'fee' | 'approvers';
+    const keyMap = { number: 'card_number', owner: 'card_owner', channel: 'card_channel_id', fee: 'card_fee_percent', approvers: 'card_approver_ids' };
     const settingKey = keyMap[sub];
     const label = CARD_SETTING_LABELS[settingKey];
     setAdminPending(ctx.from.id, { kind: 'card-setting-input', settingKey, label });
+    await ctx.reply(`✏️ <b>${label}</b> رو بفرست:`, { parse_mode: 'HTML' });
+  });
+
+  admin.callbackQuery('admin:settings:channel-gate', adminMiddleware, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const text = await buildChannelGateText();
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: channelGateKeyboard() });
+  });
+
+  admin.callbackQuery(/^admin:settings:channel-gate:(id|username)$/, adminMiddleware, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const sub = ctx.match[1] as 'id' | 'username';
+    const settingKey = sub === 'id' ? 'REQUIRED_CHANNEL_ID' : 'REQUIRED_CHANNEL_USERNAME';
+    const label = CHANNEL_GATE_LABELS[settingKey];
+    setAdminPending(ctx.from.id, { kind: 'channel-gate-setting-input', settingKey, label });
     await ctx.reply(`✏️ <b>${label}</b> رو بفرست:`, { parse_mode: 'HTML' });
   });
 

@@ -1,4 +1,4 @@
-import { type Bot, Composer } from 'grammy';
+import { type Bot, Composer, InlineKeyboard } from 'grammy';
 import { OrderStatus } from '@prisma/client';
 import { type BotContext } from '../types';
 import { prisma } from '@/db/client';
@@ -48,35 +48,35 @@ export function registerCardPaymentHandler(bot: Bot<BotContext>): void {
     await processReceipt(ctx, pending.orderId, { type: 'text', text: ctx.message.text });
   });
 
-  // ── Reaction: admin approves or rejects ────────────────────────────────────
-  handler.on('message_reaction', async (ctx) => {
-    const reaction = ctx.update.message_reaction;
-    if (!reaction) return;
-
+  // ── Inline button: admin approves or rejects ──────────────────────────────
+  handler.callbackQuery(/^card:(approve|reject):(.+)$/, async (ctx) => {
     const settings = await settingsService.getCardSettings();
-    if (!settings.channelId) return;
-    if (reaction.chat.id !== settings.channelId) return;
 
-    const wasAdded = (emoji: string): boolean =>
-      reaction.new_reaction.some((r) => r.type === 'emoji' && r.emoji === emoji) &&
-      !reaction.old_reaction.some((r) => r.type === 'emoji' && r.emoji === emoji);
+    if (!settings.approverIds.includes(ctx.from.id)) {
+      await ctx.answerCallbackQuery({ text: '⛔️ شما دسترسی به این عملیات ندارید.', show_alert: true });
+      return;
+    }
 
-    if (!wasAdded('👍') && !wasAdded('👎')) return;
+    const action = ctx.match[1] as 'approve' | 'reject';
+    const orderId = ctx.match[2];
 
     const order = await prisma.order.findFirst({
-      where: {
-        cardReceiptMessageId: reaction.message_id,
-        paymentMethod: 'CARD',
-        status: 'PENDING_CARD_APPROVAL',
-      },
+      where: { id: orderId, paymentMethod: 'CARD', status: 'PENDING_CARD_APPROVAL' },
     });
 
-    if (!order) return;
+    if (!order) {
+      await ctx.answerCallbackQuery({ text: 'سفارش پیدا نشد یا قبلاً پردازش شده.' });
+      return;
+    }
 
-    if (wasAdded('👍')) {
+    await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+
+    if (action === 'approve') {
       await approveCardOrder(order.id, order.userId);
+      await ctx.answerCallbackQuery({ text: '✅ پرداخت تایید شد.' });
     } else {
       await rejectCardOrder(order.id, order.userId);
+      await ctx.answerCallbackQuery({ text: '❌ پرداخت رد شد.' });
     }
   });
 
@@ -107,15 +107,20 @@ async function processReceipt(
   }
 
   const user = ctx.from;
-  const userDisplay = user.username ? `@${escapeHtml(user.username)}` : `#${user.id}`;
+  const userDisplay = user.username
+    ? `${escapeHtml(user.first_name ?? '')} (@${escapeHtml(user.username)})`
+    : `${escapeHtml(user.first_name ?? '')} (#${user.id})`;
 
   const caption =
-    `📥 <b>رسید کارتی جدید</b>\n\n` +
-    `👤 کاربر: ${userDisplay} (id: <code>${user.id}</code>)\n` +
-    `📦 ${formatGB(order.trafficGB)} — ${order.durationDays} روز\n` +
+    `💳 <b>رسید کارت به کارت</b>\n\n` +
+    `👤 کاربر: ${userDisplay}\n` +
+    `📦 سرویس: ${formatGB(order.trafficGB)} — ${order.durationDays} روز\n` +
     `💰 مبلغ: ${formatToman(order.priceToman)}\n` +
-    `🆔 سفارش: <code>${order.id}</code>\n\n` +
-    `👍 تأیید  |  👎 رد`;
+    `🆔 سفارش: <code>#${order.id}</code>`;
+
+  const keyboard = new InlineKeyboard()
+    .text('✅ تایید پرداخت', `card:approve:${orderId}`)
+    .text('❌ رد پرداخت', `card:reject:${orderId}`);
 
   let channelMsgId: number;
   try {
@@ -123,11 +128,15 @@ async function processReceipt(
       const msg = await ctx.api.sendPhoto(settings.channelId, receipt.fileId, {
         caption,
         parse_mode: 'HTML',
+        reply_markup: keyboard,
       });
       channelMsgId = msg.message_id;
     } else {
-      const fullText = caption + `\n\n📄 متن رسید:\n${receipt.text}`;
-      const msg = await ctx.api.sendMessage(settings.channelId, fullText, { parse_mode: 'HTML' });
+      const fullText = caption + `\n\n📄 متن رسید:\n${escapeHtml(receipt.text)}`;
+      const msg = await ctx.api.sendMessage(settings.channelId, fullText, {
+        parse_mode: 'HTML',
+        reply_markup: keyboard,
+      });
       channelMsgId = msg.message_id;
     }
   } catch (err) {

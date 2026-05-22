@@ -13,7 +13,8 @@ export type AdminInputAction =
   | { kind: 'discount-min-purchase-input'; code: string; percentOff: number; maxUses: number | null; expiresAt: Date | null }
   | { kind: 'discount-user-input'; code: string; percentOff: number; maxUses: number | null; expiresAt: Date | null; minPurchase: bigint | null }
   | { kind: 'discount-user-id-input'; code: string; percentOff: number; maxUses: number | null; expiresAt: Date | null; minPurchase: bigint | null }
-  | { kind: 'card-setting-input'; settingKey: string; label: string };
+  | { kind: 'card-setting-input'; settingKey: string; label: string }
+  | { kind: 'channel-gate-setting-input'; settingKey: string; label: string };
 
 type Pending = {
   action: AdminInputAction;

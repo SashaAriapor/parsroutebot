@@ -26,7 +26,6 @@ async function main() {
     allowed_updates: [
       'message',
       'callback_query',
-      'message_reaction',
       'my_chat_member',
       'chat_member',
     ],
