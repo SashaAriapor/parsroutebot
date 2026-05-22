@@ -1,11 +1,10 @@
+import axios from 'axios';
 import { logger } from '@/lib/logger';
-import { createHttpClient } from '@/lib/axios';
 import type { IFxClient } from './fx.interface';
 
-const directClient = createHttpClient(8_000, { direct: true });
-const proxyClient = createHttpClient(10_000);
-
 const CACHE_TTL_MS = 5 * 60 * 1_000;
+const RAMZINEX_URL =
+  'https://publicapi.ramzinex.com/exchange/api/v1.0/exchange/chart/statistics-24';
 
 export class FxClient implements IFxClient {
   private cache: { rate: number; fetchedAt: Date } | null = null;
@@ -15,29 +14,22 @@ export class FxClient implements IFxClient {
       return this.cache;
     }
 
-    // 1. Nobitex TON/RLS — direct, no proxy
     try {
-      const rate = await fetchTonFromNobitex();
+      const res = await axios.get(RAMZINEX_URL, { timeout: 10_000 });
+
+      const rlsPrice = res.data?.data?.['272']?.close;
+      if (!rlsPrice || rlsPrice <= 0) throw new Error('Invalid Ramzinex response');
+
+      const rate = Math.round(rlsPrice / 10);
       this.cache = { rate, fetchedAt: new Date() };
-      logger.info({ rate }, 'FX rate fetched from Nobitex');
+      logger.info({ rate, rlsPrice }, 'FX rate fetched from Ramzinex (pair 272 TON/IRR)');
       return this.cache;
     } catch (err) {
-      logger.warn({ err }, 'Nobitex TON/RLS failed, trying Binance fallback');
+      logger.warn({ err }, 'Ramzinex FX fetch failed');
     }
 
-    // 2. Binance TON/USDT (proxy) × Nobitex USDT/RLS (direct)
-    try {
-      const rate = await fetchTonFromBinance();
-      this.cache = { rate, fetchedAt: new Date() };
-      logger.info({ rate, source: 'binance' }, 'FX rate fetched from Binance fallback');
-      return this.cache;
-    } catch (err) {
-      logger.warn({ err }, 'Binance fallback FX fetch failed');
-    }
-
-    // 3. Stale cache (any age)
     if (this.cache) {
-      logger.warn('Using stale FX cache');
+      logger.warn({ rate: this.cache.rate }, 'Using stale FX cache');
       return this.cache;
     }
 
@@ -48,42 +40,4 @@ export class FxClient implements IFxClient {
     this.cache = null;
     return this.getTonToIrr();
   }
-}
-
-async function fetchTonFromNobitex(): Promise<number> {
-  const res = await directClient.get('https://api.nobitex.ir/market/stats', {
-    params: { srcCurrency: 'ton', dstCurrency: 'rls' },
-  });
-  const rlsPrice = parseFloat(res.data?.stats?.['ton-rls']?.latest);
-  if (!Number.isFinite(rlsPrice) || rlsPrice <= 0) {
-    throw new Error(`Invalid TON/RLS from Nobitex: ${rlsPrice}`);
-  }
-  return rlsPrice / 10;
-}
-
-async function fetchUsdtToToman(): Promise<number> {
-  const res = await directClient.get('https://api.nobitex.ir/market/stats', {
-    params: { srcCurrency: 'usdt', dstCurrency: 'rls' },
-  });
-  const rlsPrice = parseFloat(res.data?.stats?.['usdt-rls']?.latest);
-  if (!Number.isFinite(rlsPrice) || rlsPrice <= 0) {
-    throw new Error(`Invalid USDT/RLS from Nobitex: ${rlsPrice}`);
-  }
-  return rlsPrice / 10; // Rials → Toman
-}
-
-async function fetchTonFromBinance(): Promise<number> {
-  const [tonRes, usdtToman] = await Promise.all([
-    proxyClient.get('https://api.binance.com/api/v3/ticker/price', {
-      params: { symbol: 'TONUSDT' },
-    }),
-    fetchUsdtToToman(),
-  ]);
-  const tonUsd = parseFloat(tonRes.data?.price);
-  if (!Number.isFinite(tonUsd) || tonUsd <= 0) {
-    throw new Error(`Invalid TON/USDT from Binance: ${tonUsd}`);
-  }
-  const tonToman = tonUsd * usdtToman;
-  logger.info({ tonToman, tonUsd, usdtToman }, 'FX rate calculated');
-  return tonToman;
 }
