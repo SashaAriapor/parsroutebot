@@ -6,6 +6,7 @@ import { redis } from '@/db/redis';
 import { settingsService } from '@/services/settings.service';
 
 export const channelGateMiddleware: Middleware<BotContext> = async (ctx, next) => {
+  if (ctx.chat?.type !== 'private') return next();
   if (!ctx.from) return next();
   if (config.ADMIN_IDS.includes(ctx.from.id)) return next();
 

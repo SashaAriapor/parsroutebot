@@ -5,11 +5,13 @@ import { logger } from './lib/logger';
 import { createBot } from './bot/index';
 import { prisma } from './db/client';
 import { startAllWorkers } from './workers/index';
+import { startProxyHealthWorker } from './workers/proxy-health.worker';
 
 async function main() {
   logger.info({ env: config.NODE_ENV }, 'Starting bot');
 
   const bot = createBot();
+  startProxyHealthWorker();
   await startAllWorkers();
 
   const shutdown = async (signal: string) => {
