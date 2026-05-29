@@ -13,7 +13,7 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 # Install and build frontend
-COPY panel/frontend/package.json panel/frontend/package-lock.json ./panel/frontend/
+COPY panel/frontend/package.json ./panel/frontend/
 RUN cd panel/frontend && npm install
 
 COPY . .
