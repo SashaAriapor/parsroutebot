@@ -35,7 +35,7 @@ export function startExpiryNotifierWorker() {
         const sent = await safeSendMessage(
           cfg.userId,
           `⏰ <b>یادآور تمدید سرویس</b>\n\n` +
-          `🛡️ سرویس #${cfg.id} (${cfg.server.name}) <b>${daysLeft} روز</b> دیگه منقضی میشه.\n\n` +
+          `🛡️ سرویس #${cfg.id} (${cfg.serverLabel ?? cfg.server?.name ?? '—'}) <b>${daysLeft} روز</b> دیگه منقضی میشه.\n\n` +
           `برای جلوگیری از قطعی، الان تمدیدش کن.\n\n` +
           `از منوی «🛡️ سرویس‌های من» اقدام کن.`,
           { parse_mode: 'HTML' },
@@ -65,7 +65,7 @@ export function startExpiryNotifierWorker() {
         const sent = await safeSendMessage(
           cfg.userId,
           `🚨 <b>سرویس نزدیک به انقضا</b>\n\n` +
-          `🛡️ سرویس #${cfg.id} (${cfg.server.name}) فقط <b>${hoursLeft} ساعت</b> دیگه فعاله.\n\n` +
+          `🛡️ سرویس #${cfg.id} (${cfg.serverLabel ?? cfg.server?.name ?? '—'}) فقط <b>${hoursLeft} ساعت</b> دیگه فعاله.\n\n` +
           `همین الان تمدیدش کن تا قطع نشه!`,
           { parse_mode: 'HTML' },
         );

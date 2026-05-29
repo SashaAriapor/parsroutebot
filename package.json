@@ -13,22 +13,29 @@
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
     "test:pg": "tsx scripts/test-pasarguard.ts",
-    "test:ton": "tsx scripts/test-ton.ts"
+    "test:ton": "tsx scripts/test-ton.ts",
+    "panel:dev": "cd panel/frontend && vite",
+    "panel:build": "cd panel/frontend && vite build",
+    "panel:start": "node panel/backend/dist/index.js"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@grammyjs/conversations": "^1.2.0",
+    "@hono/node-server": "^2.0.4",
     "@prisma/client": "^5.7.0",
     "@ton/core": "^0.63.1",
     "@ton/ton": "^16.2.4",
     "axios": "^1.16.0",
     "axios-cookiejar-support": "^7.0.0",
+    "bcryptjs": "^3.0.3",
     "bullmq": "^5.0.0",
     "dotenv": "^16.3.0",
     "grammy": "^1.21.0",
+    "hono": "^4.12.23",
     "ioredis": "^5.10.1",
+    "jsonwebtoken": "^9.0.3",
     "nanoid": "^3.3.7",
     "pino": "^8.17.0",
     "pino-pretty": "^10.3.0",
@@ -38,6 +45,8 @@
     "zod": "^3.22.0"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^3.0.0",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.0.0",
     "@types/qrcode": "^1.5.6",
     "@types/tough-cookie": "^4.0.5",

@@ -101,6 +101,16 @@ const schema = z.object({
 
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   LOG_LEVEL: z.string().default('info'),
+
+  // Admin web panel (all optional — panel only starts when PANEL_PORT is set)
+  PANEL_PORT: z
+    .string()
+    .optional()
+    .transform((val) => (val ? parseInt(val, 10) : undefined))
+    .refine((n) => n === undefined || (!isNaN(n) && n > 0 && n <= 65535), 'PANEL_PORT must be a valid port'),
+  PANEL_JWT_SECRET: z.string().optional(),
+  PANEL_ADMIN_USERNAME: z.string().default('admin'),
+  PANEL_ADMIN_PASSWORD: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);

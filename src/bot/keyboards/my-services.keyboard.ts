@@ -2,6 +2,7 @@ import { InlineKeyboard } from 'grammy';
 import { type Server, type VpnConfig, type Plan, ConfigStatus } from '@prisma/client';
 import { daysRemaining } from '@/lib/format';
 import { TRAFFIC_PACKAGES } from '@/services/traffic-packages';
+import { getServerDisplay } from '@/services/config.service';
 
 function configStatusEmoji(config: VpnConfig): string {
   if (config.status !== ConfigStatus.ACTIVE) return '🔴';
@@ -11,7 +12,7 @@ function configStatusEmoji(config: VpnConfig): string {
 }
 
 export function configListKeyboard(
-  configs: (VpnConfig & { server: Server })[],
+  configs: (VpnConfig & { server: Server | null })[],
 ): InlineKeyboard {
   const kb = new InlineKeyboard();
   for (const cfg of configs) {
@@ -25,7 +26,7 @@ export function configListKeyboard(
           : days === 0
             ? 'منقضی'
             : `${days} روز مونده`;
-    const serverLabel = `${cfg.server.flag ?? ''}${cfg.server.name}`;
+    const serverLabel = getServerDisplay(cfg);
     kb.text(`${emoji} سرویس #${cfg.id} — ${serverLabel} — ${daysText}`, `svc:view:${cfg.id}`).row();
   }
   return kb;

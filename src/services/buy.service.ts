@@ -10,7 +10,8 @@ import { logger } from '@/lib/logger';
 
 type ExecuteParams = {
   userId: bigint;
-  serverId: number;
+  serverId?: number;
+  categoryId?: number;
   trafficGB: number;
   durationDays: number;
   pricePerGB: bigint;
@@ -38,7 +39,8 @@ type ExecuteResult =
 
 type PendingTonOrderParams = {
   userId: bigint;
-  serverId: number;
+  serverId?: number;
+  categoryId?: number;
   trafficGB: number;
   durationDays: number;
   pricePerGB: bigint;
@@ -56,7 +58,8 @@ type WalletOrderResult =
 
 type PendingCardOrderParams = {
   userId: bigint;
-  serverId: number;
+  serverId?: number;
+  categoryId?: number;
   trafficGB: number;
   durationDays: number;
   pricePerGB: bigint;
@@ -71,9 +74,17 @@ type PendingCardOrderResult =
 
 export const buyService = {
   async createPendingTonOrder(params: PendingTonOrderParams): Promise<PendingTonOrderResult> {
-    const server = await prisma.server.findUnique({ where: { id: params.serverId } });
-    if (!server) return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
-    if (!server.isActive) return { ok: false, reason: 'این سرور دیگه فعال نیست.', code: 'SERVER_INACTIVE' };
+    if (params.serverId) {
+      const server = await prisma.server.findUnique({ where: { id: params.serverId } });
+      if (!server) return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
+      if (!server.isActive) return { ok: false, reason: 'این سرور دیگه فعال نیست.', code: 'SERVER_INACTIVE' };
+    } else if (params.categoryId) {
+      const category = await prisma.serviceCategory.findUnique({ where: { id: params.categoryId } });
+      if (!category) return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
+      if (!category.isActive) return { ok: false, reason: 'این دسته‌بندی دیگه فعال نیست.', code: 'SERVER_INACTIVE' };
+    } else {
+      return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
+    }
 
     const basePriceToman = params.pricePerGB * BigInt(params.trafficGB);
 
@@ -90,7 +101,8 @@ export const buyService = {
         data: {
           userId: params.userId,
           planId: null,
-          serverId: params.serverId,
+          serverId: params.serverId ?? null,
+          categoryId: params.categoryId ?? null,
           trafficGB: params.trafficGB,
           durationDays: params.durationDays,
           pricePerGB: params.pricePerGB,
@@ -125,9 +137,17 @@ export const buyService = {
   },
 
   async createPendingCardOrder(params: PendingCardOrderParams): Promise<PendingCardOrderResult> {
-    const server = await prisma.server.findUnique({ where: { id: params.serverId } });
-    if (!server) return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
-    if (!server.isActive) return { ok: false, reason: 'این سرور دیگه فعال نیست.', code: 'SERVER_INACTIVE' };
+    if (params.serverId) {
+      const server = await prisma.server.findUnique({ where: { id: params.serverId } });
+      if (!server) return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
+      if (!server.isActive) return { ok: false, reason: 'این سرور دیگه فعال نیست.', code: 'SERVER_INACTIVE' };
+    } else if (params.categoryId) {
+      const category = await prisma.serviceCategory.findUnique({ where: { id: params.categoryId } });
+      if (!category) return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
+      if (!category.isActive) return { ok: false, reason: 'این دسته‌بندی دیگه فعال نیست.', code: 'SERVER_INACTIVE' };
+    } else {
+      return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
+    }
 
     const basePriceToman = params.pricePerGB * BigInt(params.trafficGB);
 
@@ -147,7 +167,8 @@ export const buyService = {
         data: {
           userId: params.userId,
           planId: null,
-          serverId: params.serverId,
+          serverId: params.serverId ?? null,
+          categoryId: params.categoryId ?? null,
           trafficGB: params.trafficGB,
           durationDays: params.durationDays,
           pricePerGB: params.pricePerGB,
@@ -167,13 +188,21 @@ export const buyService = {
   async createPendingWalletOrder(params: ExecuteParams): Promise<WalletOrderResult> {
     const basePriceToman = params.pricePerGB * BigInt(params.trafficGB);
 
-    const [user, server] = await Promise.all([
-      prisma.user.findUnique({ where: { id: params.userId } }),
-      prisma.server.findUnique({ where: { id: params.serverId } }),
-    ]);
+    const user = await prisma.user.findUnique({ where: { id: params.userId } });
+    if (!user) return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
 
-    if (!user || !server) return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
-    if (!server.isActive) return { ok: false, reason: 'این سرور دیگه فعال نیست.', code: 'SERVER_INACTIVE' };
+    if (params.serverId) {
+      const server = await prisma.server.findUnique({ where: { id: params.serverId } });
+      if (!server) return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
+      if (!server.isActive) return { ok: false, reason: 'این سرور دیگه فعال نیست.', code: 'SERVER_INACTIVE' };
+    } else if (params.categoryId) {
+      const category = await prisma.serviceCategory.findUnique({ where: { id: params.categoryId } });
+      if (!category) return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
+      if (!category.isActive) return { ok: false, reason: 'این دسته‌بندی دیگه فعال نیست.', code: 'SERVER_INACTIVE' };
+    } else {
+      return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
+    }
+
     if (user.walletBalance < params.finalPriceToman) return { ok: false, reason: 'موجودی کافی نیست.', code: 'INSUFFICIENT_BALANCE' };
 
     if (params.discountCode) {
@@ -196,7 +225,8 @@ export const buyService = {
           data: {
             userId: params.userId,
             planId: null,
-            serverId: params.serverId,
+            serverId: params.serverId ?? null,
+            categoryId: params.categoryId ?? null,
             trafficGB: params.trafficGB,
             durationDays: params.durationDays,
             pricePerGB: params.pricePerGB,
@@ -228,13 +258,22 @@ export const buyService = {
     const basePriceToman = params.pricePerGB * BigInt(params.trafficGB);
 
     // 1. Pre-validate
-    const [user, server] = await Promise.all([
-      prisma.user.findUnique({ where: { id: params.userId } }),
-      prisma.server.findUnique({ where: { id: params.serverId } }),
-    ]);
+    const user = await prisma.user.findUnique({ where: { id: params.userId } });
+    if (!user) return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
 
-    if (!user || !server) return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
-    if (!server.isActive) return { ok: false, reason: 'این سرور دیگه فعال نیست.', code: 'SERVER_INACTIVE' };
+    let pgGroupId: number | undefined;
+    if (params.serverId) {
+      const server = await prisma.server.findUnique({ where: { id: params.serverId } });
+      if (!server) return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
+      if (!server.isActive) return { ok: false, reason: 'این سرور دیگه فعال نیست.', code: 'SERVER_INACTIVE' };
+    } else if (params.categoryId) {
+      const category = await prisma.serviceCategory.findUnique({ where: { id: params.categoryId } });
+      if (!category) return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
+      if (!category.isActive) return { ok: false, reason: 'این دسته‌بندی دیگه فعال نیست.', code: 'SERVER_INACTIVE' };
+      pgGroupId = parseInt(category.serverId, 10) || undefined;
+    } else {
+      return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
+    }
     if (user.walletBalance < params.finalPriceToman) return { ok: false, reason: 'موجودی کافی نیست.', code: 'INSUFFICIENT_BALANCE' };
 
     if (params.discountCode) {
@@ -254,6 +293,7 @@ export const buyService = {
         username: pgUsername,
         dataLimitBytes: gbToBytes(params.trafficGB),
         expireAt,
+        groupId: pgGroupId,
       });
     } catch (err) {
       logger.error({ err, params }, 'Failed to create PasarGuard user during purchase');
@@ -277,7 +317,8 @@ export const buyService = {
           data: {
             userId: params.userId,
             planId: null,
-            serverId: params.serverId,
+            serverId: params.serverId ?? null,
+            categoryId: params.categoryId ?? null,
             trafficGB: params.trafficGB,
             durationDays: params.durationDays,
             pricePerGB: params.pricePerGB,
@@ -293,7 +334,7 @@ export const buyService = {
         const cfg = await tx.vpnConfig.create({
           data: {
             userId: params.userId,
-            serverId: params.serverId,
+            serverId: params.serverId ?? null,
             email: pgUser.username,
             uuid: String(pgUser.id),
             subId: extractSubToken(pgUser.subscriptionUrl),

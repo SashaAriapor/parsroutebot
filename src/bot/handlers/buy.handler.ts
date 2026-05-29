@@ -14,6 +14,7 @@ import { generatePasarGuardUsername } from '@/adapters/pasarguard';
 import { setUserPending } from '@/bot/state/pending-user-input';
 import { type BuyState, getBuyState, setBuyState, clearBuyState } from '../state/pending-buy-state';
 import {
+  categoryListKeyboard,
   gbPickerKeyboard,
   serverListKeyboard,
   discountScreenKeyboard,
@@ -24,15 +25,22 @@ import {
   buyTonInvoiceKeyboard,
 } from '../keyboards/buy.keyboard';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Settings helpers ─────────────────────────────────────────────────────────
 
-const QUICK_GB_PICKS = [1, 5, 10, 20] as const;
-
-function computeQuickPicks(): Array<{ gb: number; price: bigint }> {
-  return QUICK_GB_PICKS.map((gb) => ({
-    gb,
-    price: BigInt(gb) * config.PRICE_PER_GB_TOMAN,
-  }));
+async function getDurationAndPicks(): Promise<{ durationDays: number; quickPickGbs: number[] }> {
+  const [rawDuration, rawQuickPickGb] = await Promise.all([
+    settingsService.get('SERVICE_DURATION_DAYS'),
+    settingsService.get('QUICK_PICK_GB'),
+  ]);
+  const durationDays = rawDuration
+    ? (parseInt(rawDuration, 10) || config.DEFAULT_DURATION_DAYS)
+    : config.DEFAULT_DURATION_DAYS;
+  const quickPickGbs = (rawQuickPickGb ?? '1,5,10,20')
+    .split(',')
+    .map((n) => parseInt(n.trim(), 10))
+    .filter((n) => !isNaN(n) && n > 0)
+    .slice(0, 4);
+  return { durationDays, quickPickGbs };
 }
 
 function normalizeDigits(s: string): string {
@@ -41,13 +49,37 @@ function normalizeDigits(s: string): string {
 
 // ─── Screen renderers ─────────────────────────────────────────────────────────
 
+async function renderCategoryPicker(ctx: BotContext, edit: boolean): Promise<void> {
+  const categories = await prisma.serviceCategory.findMany({
+    where: { isActive: true },
+    orderBy: { id: 'asc' },
+  });
+
+  if (categories.length === 0) {
+    const text = '❌ در حال حاضر سرویسی برای خرید وجود نداره. لطفاً بعداً دوباره امتحان کن یا با پشتیبانی تماس بگیر.';
+    if (edit) await ctx.editMessageText(text);
+    else await ctx.reply(text);
+    return;
+  }
+
+  const text = '🛒 <b>نوع سرویس رو انتخاب کن:</b>';
+  const kb = categoryListKeyboard(categories);
+  if (edit) await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
+  else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
+}
+
 async function renderGBPicker(ctx: BotContext, edit: boolean): Promise<void> {
+  const state = getBuyState(ctx.from!.id);
+  const pricePerGB = state?.pricePerGB ?? config.PRICE_PER_GB_TOMAN;
+  const { durationDays, quickPickGbs } = await getDurationAndPicks();
+  const quickPicks = quickPickGbs.map((gb) => ({ gb, price: BigInt(gb) * pricePerGB }));
+
   const text =
     '🛒 <b>خرید سرویس جدید</b>\n\n' +
-    `💵 قیمت هر گیگابایت: ${formatToman(config.PRICE_PER_GB_TOMAN)}\n` +
-    `📅 مدت: ${config.DEFAULT_DURATION_DAYS} روز\n\n` +
+    `💰 قیمت هر گیگابایت: ${formatToman(pricePerGB)}\n` +
+    `📅 مدت: ${durationDays} روز\n\n` +
     'حجم مورد نیاز رو انتخاب کن:';
-  const kb = gbPickerKeyboard(computeQuickPicks());
+  const kb = gbPickerKeyboard(quickPicks);
   if (edit) await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
   else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -67,13 +99,15 @@ async function renderServerSelection(
   ctx: BotContext,
   servers: Awaited<ReturnType<typeof prisma.server.findMany>>,
   trafficGB: number,
+  pricePerGB: bigint,
+  durationDays: number,
   edit: boolean,
 ): Promise<void> {
-  const price = BigInt(trafficGB) * config.PRICE_PER_GB_TOMAN;
+  const price = BigInt(trafficGB) * pricePerGB;
   const text =
     `📍 <b>انتخاب سرور</b>\n\n` +
     `📦 حجم: ${formatGB(trafficGB)}\n` +
-    `📅 مدت: ${config.DEFAULT_DURATION_DAYS} روز\n` +
+    `📅 مدت: ${durationDays} روز\n` +
     `💰 قیمت: ${formatToman(price)}\n\n` +
     'سرور دلخواهت رو انتخاب کن:';
   const kb = serverListKeyboard(servers);
@@ -93,18 +127,28 @@ async function renderDiscountScreen(ctx: BotContext, edit: boolean): Promise<voi
 
 async function renderSummary(ctx: BotContext, state: BuyState, edit: boolean): Promise<void> {
   const userId = BigInt(ctx.from!.id);
-
-  const [server, user] = await Promise.all([
-    prisma.server.findUnique({ where: { id: state.serverId! } }),
-    prisma.user.findUnique({ where: { id: userId } }),
-  ]);
-
-  if (!server || !user) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
     const errText = '❌ اطلاعات سفارش منقضی شده. لطفاً دوباره شروع کن.';
     if (edit) await ctx.editMessageText(errText);
     else await ctx.reply(errText);
     clearBuyState(ctx.from!.id);
     return;
+  }
+
+  let serverDisplay: string;
+  if (state.categoryId) {
+    serverDisplay = state.categoryServerName ?? '—';
+  } else {
+    const server = await prisma.server.findUnique({ where: { id: state.serverId! } });
+    if (!server) {
+      const errText = '❌ اطلاعات سفارش منقضی شده. لطفاً دوباره شروع کن.';
+      if (edit) await ctx.editMessageText(errText);
+      else await ctx.reply(errText);
+      clearBuyState(ctx.from!.id);
+      return;
+    }
+    serverDisplay = `${server.flag ?? ''}${escapeHtml(server.name)}`;
   }
 
   const basePriceToman = state.basePriceToman!;
@@ -121,7 +165,7 @@ async function renderSummary(ctx: BotContext, state: BuyState, edit: boolean): P
     '',
     `📦 حجم: ${formatGB(state.trafficGB!)}`,
     `📅 مدت: ${state.durationDays!} روز`,
-    `📍 سرور: ${server.flag ?? ''}${escapeHtml(server.name)}`,
+    `📍 سرور: ${serverDisplay}`,
     '',
     `💵 قیمت: ${formatToman(basePriceToman)}`,
   ];
@@ -147,18 +191,29 @@ async function renderSummary(ctx: BotContext, state: BuyState, edit: boolean): P
 
 async function renderWalletConfirm(ctx: BotContext, state: BuyState, edit: boolean): Promise<void> {
   const userId = BigInt(ctx.from!.id);
+  const user = await prisma.user.findUnique({ where: { id: userId } });
 
-  const [server, user] = await Promise.all([
-    prisma.server.findUnique({ where: { id: state.serverId! } }),
-    prisma.user.findUnique({ where: { id: userId } }),
-  ]);
-
-  if (!server || !user || !state.finalPriceToman) {
+  if (!user || !state.finalPriceToman) {
     const errText = '❌ اطلاعات سفارش منقضی شده. لطفاً دوباره شروع کن.';
     if (edit) await ctx.editMessageText(errText);
     else await ctx.reply(errText);
     clearBuyState(ctx.from!.id);
     return;
+  }
+
+  let serverDisplay: string;
+  if (state.categoryId) {
+    serverDisplay = state.categoryServerName ?? '—';
+  } else {
+    const server = await prisma.server.findUnique({ where: { id: state.serverId! } });
+    if (!server) {
+      const errText = '❌ اطلاعات سفارش منقضی شده. لطفاً دوباره شروع کن.';
+      if (edit) await ctx.editMessageText(errText);
+      else await ctx.reply(errText);
+      clearBuyState(ctx.from!.id);
+      return;
+    }
+    serverDisplay = `${server.flag ?? ''}${escapeHtml(server.name)}`;
   }
 
   if (user.walletBalance < state.finalPriceToman) {
@@ -179,7 +234,7 @@ async function renderWalletConfirm(ctx: BotContext, state: BuyState, edit: boole
   const text =
     `✅ <b>تأیید نهایی خرید</b>\n\n` +
     `📦 ${formatGB(state.trafficGB!)} — ${state.durationDays!} روز\n` +
-    `📍 ${server.flag ?? ''}${escapeHtml(server.name)}\n` +
+    `📍 ${serverDisplay}\n` +
     `💰 مبلغ: ${formatToman(state.finalPriceToman)}\n\n` +
     `موجودی فعلی: ${formatToman(user.walletBalance)}\n` +
     `موجودی بعد از خرید: ${formatToman(afterBalance)}\n\n` +
@@ -190,43 +245,47 @@ async function renderWalletConfirm(ctx: BotContext, state: BuyState, edit: boole
   else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
-// ─── Shared: pick GB and advance to next step ─────────────────────────────────
+// ─── Shared: pick GB and advance ─────────────────────────────────────────────
 
-async function applyGBSelection(
-  ctx: BotContext,
-  gb: number,
-  edit: boolean,
-): Promise<void> {
+async function applyGBSelection(ctx: BotContext, gb: number, edit: boolean): Promise<void> {
   const userId = ctx.from!.id;
-  const pricePerGB = config.PRICE_PER_GB_TOMAN;
-  const durationDays = config.DEFAULT_DURATION_DAYS;
+  const currentState = getBuyState(userId);
+  const { durationDays } = await getDurationAndPicks();
+  const pricePerGB = currentState?.pricePerGB ?? config.PRICE_PER_GB_TOMAN;
   const basePriceToman = BigInt(gb) * pricePerGB;
 
-  clearBuyState(userId);
   setBuyState(userId, {
     trafficGB: gb,
     durationDays,
     pricePerGB,
     basePriceToman,
+    awaitingGBInput: false,
   });
 
-  const servers = await prisma.server.findMany({
-    where: { isActive: true },
-    orderBy: { sortOrder: 'asc' },
-  });
-
-  if (servers.length === 0) {
-    const errText = '❌ در حال حاضر سرور فعالی وجود نداره. لطفاً به پشتیبانی پیام بده.';
-    if (edit) await ctx.editMessageText(errText);
-    else await ctx.reply(errText);
-    return;
-  }
-
-  if (servers.length === 1) {
-    setBuyState(userId, { serverId: servers[0].id, awaitingDiscountInput: true });
+  if (currentState?.categoryId) {
+    // Category flow: server is determined by category, skip server selection
+    setBuyState(userId, { awaitingDiscountInput: true });
     await renderDiscountScreen(ctx, edit);
   } else {
-    await renderServerSelection(ctx, servers, gb, edit);
+    // Legacy: DB server selection
+    const servers = await prisma.server.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' },
+    });
+
+    if (servers.length === 0) {
+      const errText = '❌ در حال حاضر سرور فعالی وجود نداره. لطفاً به پشتیبانی پیام بده.';
+      if (edit) await ctx.editMessageText(errText);
+      else await ctx.reply(errText);
+      return;
+    }
+
+    if (servers.length === 1) {
+      setBuyState(userId, { serverId: servers[0].id, awaitingDiscountInput: true });
+      await renderDiscountScreen(ctx, edit);
+    } else {
+      await renderServerSelection(ctx, servers, gb, pricePerGB, durationDays, edit);
+    }
   }
 }
 
@@ -287,11 +346,11 @@ async function postBuySaleToChannel(
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
 export function registerBuyHandler(bot: Bot<BotContext>): void {
-  // ── Entry: ReplyKeyboard tap ─────────────────────────────────────────────
+  // ── Entry: ReplyKeyboard tap — show category picker ──────────────────────
 
   bot.hears(MENU.BUY, async (ctx) => {
     clearBuyState(ctx.from!.id);
-    await renderGBPicker(ctx, false);
+    await renderCategoryPicker(ctx, false);
   });
 
   // ── Text input: custom GB or discount code ────────────────────────────────
@@ -373,10 +432,32 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
       return;
     }
 
+    // ── Category selection ───────────────────────────────────────────────────
+    if (data.startsWith('buy:category:')) {
+      const categoryId = parseInt(data.slice('buy:category:'.length), 10);
+      const category = await prisma.serviceCategory.findUnique({ where: { id: categoryId } });
+
+      if (!category || !category.isActive) {
+        await ctx.answerCallbackQuery({ text: '❌ این دسته‌بندی دیگه فعال نیست', show_alert: true });
+        return;
+      }
+
+      clearBuyState(userId);
+      setBuyState(userId, {
+        categoryId: category.id,
+        categoryServerName: category.serverName,
+        pricePerGB: category.pricePerGb,
+      });
+
+      await renderGBPicker(ctx, true);
+      await ctx.answerCallbackQuery();
+      return;
+    }
+
     // ── TON payment ──────────────────────────────────────────────────────────
     if (data === 'buy:pay:ton') {
       const state = getBuyState(userId);
-      if (!state?.trafficGB || !state.serverId || state.finalPriceToman == null) {
+      if (!state?.trafficGB || (!state.categoryId && !state.serverId) || state.finalPriceToman == null) {
         clearBuyState(userId);
         await ctx.editMessageText('❌ اطلاعات سفارش منقضی شده. لطفاً دوباره شروع کن.');
         await ctx.answerCallbackQuery();
@@ -388,6 +469,7 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
       const result = await buyService.createPendingTonOrder({
         userId: BigInt(userId),
         serverId: state.serverId,
+        categoryId: state.categoryId,
         trafficGB: state.trafficGB!,
         durationDays: state.durationDays!,
         pricePerGB: state.pricePerGB!,
@@ -398,7 +480,7 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
       if (!result.ok) {
         const msgMap: Record<string, string> = {
           INVALID_DISCOUNT: `❌ کد تخفیف منقضی شده: ${result.reason}`,
-          SERVER_INACTIVE: '❌ این سرور دیگه فعال نیست.',
+          SERVER_INACTIVE: '❌ این سرویس دیگه فعال نیست.',
           UNKNOWN: '❌ خطا در ثبت سفارش.',
         };
         await ctx.editMessageText(msgMap[result.code] ?? '❌ خطا در ثبت سفارش.');
@@ -409,13 +491,13 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
       clearBuyState(userId);
 
       const nanoTonDisplay = (Number(result.tonAmountNano) / 1e9).toFixed(6);
-      const server = await prisma.server.findUnique({ where: { id: state.serverId! } });
+      const serverDisplay = state.categoryServerName ?? state.serverId?.toString() ?? '—';
 
       const text = [
         '🪙 <b>پرداخت با TON</b>',
         '',
         `📦 ${formatGB(state.trafficGB!)} — ${state.durationDays!} روز`,
-        `📍 ${server?.flag ?? ''}${escapeHtml(server?.name ?? '—')}`,
+        `📍 ${escapeHtml(serverDisplay)}`,
         `💰 معادل: ${formatToman(state.finalPriceToman!)}`,
         '',
         `🪙 مبلغ TON: <b>${nanoTonDisplay} TON</b>`,
@@ -505,7 +587,7 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
 
     // ── Custom GB prompt ─────────────────────────────────────────────────────
     if (data === 'buy:custom-gb') {
-      clearBuyState(userId);
+      // Preserve category in state; only set awaiting flag
       setBuyState(userId, { awaitingGBInput: true });
       await renderCustomGBPrompt(ctx, true);
       await ctx.answerCallbackQuery();
@@ -514,13 +596,21 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
 
     // ── Back to GB picker ────────────────────────────────────────────────────
     if (data === 'buy:back-to-gb') {
-      clearBuyState(userId);
+      const state = getBuyState(userId);
+      if (state?.categoryId) {
+        // Keep category, reset GB-related fields
+        const { categoryId, pricePerGB, categoryServerName } = state;
+        clearBuyState(userId);
+        setBuyState(userId, { categoryId, pricePerGB, categoryServerName });
+      } else {
+        clearBuyState(userId);
+      }
       await renderGBPicker(ctx, true);
       await ctx.answerCallbackQuery();
       return;
     }
 
-    // ── Server selection ─────────────────────────────────────────────────────
+    // ── Server selection (legacy DB-server flow) ──────────────────────────────
     if (data.startsWith('buy:server:')) {
       const serverId = parseInt(data.slice('buy:server:'.length), 10);
       setBuyState(userId, { serverId, awaitingDiscountInput: true });
@@ -532,7 +622,7 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
     // ── Skip discount ─────────────────────────────────────────────────────────
     if (data === 'buy:skip-discount') {
       const state = getBuyState(userId);
-      if (!state?.trafficGB || !state.serverId) {
+      if (!state?.trafficGB || (!state.categoryId && !state.serverId)) {
         clearBuyState(userId);
         await ctx.editMessageText('❌ اطلاعات سفارش منقضی شده. لطفاً دوباره شروع کن.');
         await ctx.answerCallbackQuery();
@@ -547,9 +637,9 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
     // ── Back to discount ──────────────────────────────────────────────────────
     if (data === 'buy:back-to-discount') {
       const state = getBuyState(userId);
-      if (!state?.trafficGB || !state.serverId) {
+      if (!state?.trafficGB || (!state.categoryId && !state.serverId)) {
         clearBuyState(userId);
-        await renderGBPicker(ctx, true);
+        await renderCategoryPicker(ctx, true);
         await ctx.answerCallbackQuery();
         return;
       }
@@ -568,9 +658,9 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
     // ── Show summary (from insufficient balance back button) ─────────────────
     if (data === 'buy:summary') {
       const state = getBuyState(userId);
-      if (!state?.trafficGB || !state.serverId) {
+      if (!state?.trafficGB || (!state.categoryId && !state.serverId)) {
         clearBuyState(userId);
-        await renderGBPicker(ctx, true);
+        await renderCategoryPicker(ctx, true);
         await ctx.answerCallbackQuery();
         return;
       }
@@ -582,7 +672,7 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
     // ── Wallet payment ────────────────────────────────────────────────────────
     if (data === 'buy:pay:wallet') {
       const state = getBuyState(userId);
-      if (!state?.trafficGB || !state.serverId || state.finalPriceToman == null) {
+      if (!state?.trafficGB || (!state.categoryId && !state.serverId) || state.finalPriceToman == null) {
         clearBuyState(userId);
         await ctx.editMessageText('❌ اطلاعات سفارش منقضی شده. لطفاً دوباره شروع کن.');
         await ctx.answerCallbackQuery();
@@ -596,7 +686,7 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
     // ── Execute purchase ──────────────────────────────────────────────────────
     if (data === 'buy:execute') {
       const state = getBuyState(userId);
-      if (!state?.trafficGB || !state.serverId || !state.pricePerGB || state.finalPriceToman == null) {
+      if (!state?.trafficGB || (!state.categoryId && !state.serverId) || !state.pricePerGB || state.finalPriceToman == null) {
         clearBuyState(userId);
         await ctx.editMessageText('❌ اطلاعات سفارش منقضی شده. لطفاً دوباره شروع کن.');
         await ctx.answerCallbackQuery();
@@ -608,6 +698,7 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
       const result = await buyService.createPendingWalletOrder({
         userId: BigInt(userId),
         serverId: state.serverId,
+        categoryId: state.categoryId,
         trafficGB: state.trafficGB,
         durationDays: state.durationDays!,
         pricePerGB: state.pricePerGB,
@@ -618,7 +709,7 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
       if (!result.ok) {
         const msgMap: Record<string, string> = {
           INSUFFICIENT_BALANCE: '❌ موجودی کافی نیست. لطفاً کیف پولت رو شارژ کن.',
-          SERVER_INACTIVE: '❌ این سرور دیگه فعال نیست. لطفاً دوباره از ابتدا امتحان کن.',
+          SERVER_INACTIVE: '❌ این سرویس دیگه فعال نیست. لطفاً دوباره از ابتدا امتحان کن.',
           INVALID_DISCOUNT: `❌ کد تخفیف منقضی شده یا نامعتبره: ${result.reason}`,
           UNKNOWN: '❌ خطا در ثبت سفارش. اگه از کیف پولت کسر شد، با پشتیبانی تماس بگیر.',
         };
@@ -644,7 +735,7 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
     // ── Card payment ──────────────────────────────────────────────────────────
     if (data === 'buy:pay:card') {
       const state = getBuyState(userId);
-      if (!state?.trafficGB || !state.serverId || !state.pricePerGB || state.finalPriceToman == null) {
+      if (!state?.trafficGB || (!state.categoryId && !state.serverId) || !state.pricePerGB || state.finalPriceToman == null) {
         clearBuyState(userId);
         await ctx.editMessageText('❌ اطلاعات سفارش منقضی شده. لطفاً دوباره شروع کن.');
         await ctx.answerCallbackQuery();
@@ -662,6 +753,7 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
       const result = await buyService.createPendingCardOrder({
         userId: BigInt(userId),
         serverId: state.serverId,
+        categoryId: state.categoryId,
         trafficGB: state.trafficGB,
         durationDays: state.durationDays!,
         pricePerGB: state.pricePerGB,
@@ -673,7 +765,7 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
       if (!result.ok) {
         const msgMap: Record<string, string> = {
           INVALID_DISCOUNT: `❌ کد تخفیف منقضی شده: ${result.reason}`,
-          SERVER_INACTIVE: '❌ این سرور دیگه فعال نیست.',
+          SERVER_INACTIVE: '❌ این سرویس دیگه فعال نیست.',
           UNKNOWN: '❌ خطا در ثبت سفارش.',
         };
         await ctx.editMessageText(msgMap[result.code] ?? '❌ خطا در ثبت سفارش.');

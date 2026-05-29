@@ -33,7 +33,7 @@ export function startUsageNotifierWorker() {
           const sent = await safeSendMessage(
             cfg.userId,
             `🚨 <b>حجم سرویس تموم شدنیه</b>\n\n` +
-            `🛡️ سرویس #${cfg.id} (${cfg.server.name})\n` +
+            `🛡️ سرویس #${cfg.id} (${cfg.serverLabel ?? cfg.server?.name ?? '—'})\n` +
             `📦 <b>${Math.round(ratio * 100)}٪</b> حجم مصرف شده — حدود ${remainingGB.toFixed(1)} گیگ باقی مونده.\n\n` +
             `از «🛡️ سرویس‌های من» می‌تونی حجم اضافه کنی.`,
             { parse_mode: 'HTML' },
@@ -49,7 +49,7 @@ export function startUsageNotifierWorker() {
           const sent = await safeSendMessage(
             cfg.userId,
             `⚠️ <b>هشدار مصرف حجم</b>\n\n` +
-            `🛡️ سرویس #${cfg.id} (${cfg.server.name})\n` +
+            `🛡️ سرویس #${cfg.id} (${cfg.serverLabel ?? cfg.server?.name ?? '—'})\n` +
             `📦 <b>${Math.round(ratio * 100)}٪</b> حجم سرویست مصرف شده.\n\n` +
             `اگه نیاز داری، از «🛡️ سرویس‌های من» حجم اضافه کن.`,
             { parse_mode: 'HTML' },

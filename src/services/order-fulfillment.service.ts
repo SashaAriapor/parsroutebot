@@ -1,4 +1,4 @@
-import { OrderStatus, WalletTxType } from '@prisma/client';
+import { OrderStatus, WalletTxType, Prisma } from '@prisma/client';
 import { InputFile } from 'grammy';
 import { prisma } from '@/db/client';
 import { pasarguardClient, generatePasarGuardUsername, gbToBytes, extractSubToken } from '@/adapters/pasarguard';
@@ -31,14 +31,37 @@ export const orderFulfillmentService = {
       return { ok: false, reason: `order status is ${order.status}` };
     }
 
-    const server = await prisma.server.findUnique({ where: { id: order.serverId! } });
-    if (!server) {
-      logger.error({ orderId, serverId: order.serverId }, 'fulfill: server not found');
-      return { ok: false, reason: 'server not found' };
-    }
-    if (!server.isActive) {
-      logger.error({ orderId, serverId: order.serverId }, 'fulfill: server is inactive');
-      return { ok: false, reason: 'server is inactive' };
+    let serverDisplayName: string;
+    let serverDisplayFlag: string | null = null;
+    let pgGroupId: number | undefined;
+
+    if (order.serverId) {
+      const server = await prisma.server.findUnique({ where: { id: order.serverId } });
+      if (!server) {
+        logger.error({ orderId, serverId: order.serverId }, 'fulfill: server not found');
+        return { ok: false, reason: 'server not found' };
+      }
+      if (!server.isActive) {
+        logger.error({ orderId, serverId: order.serverId }, 'fulfill: server is inactive');
+        return { ok: false, reason: 'server is inactive' };
+      }
+      serverDisplayName = server.name;
+      serverDisplayFlag = server.flag;
+    } else if (order.categoryId) {
+      const category = await prisma.serviceCategory.findUnique({ where: { id: order.categoryId } });
+      if (!category) {
+        logger.error({ orderId, categoryId: order.categoryId }, 'fulfill: category not found');
+        return { ok: false, reason: 'category not found' };
+      }
+      if (!category.isActive) {
+        logger.error({ orderId, categoryId: order.categoryId }, 'fulfill: category is inactive');
+        return { ok: false, reason: 'category is inactive' };
+      }
+      serverDisplayName = category.serverName;
+      pgGroupId = parseInt(category.serverId, 10) || undefined;
+    } else {
+      logger.error({ orderId }, 'fulfill: order has no serverId or categoryId');
+      return { ok: false, reason: 'no server or category on order' };
     }
 
     const pgUsername = username ?? generatePasarGuardUsername();
@@ -53,6 +76,7 @@ export const orderFulfillmentService = {
         username: pgUsername,
         dataLimitBytes: gbToBytes(order.trafficGB),
         expireAt,
+        groupId: pgGroupId,
       });
     } catch (err) {
       const errMsg = (err instanceof Error ? err.message : String(err)).toLowerCase();
@@ -106,7 +130,8 @@ export const orderFulfillmentService = {
         const cfg = await tx.vpnConfig.create({
           data: {
             userId: order.userId,
-            serverId: order.serverId!,
+            serverId: order.serverId ?? null,
+            serverLabel: serverDisplayName,
             email: pgUser.username,
             uuid: String(pgUser.id),
             subId: extractSubToken(pgUser.subscriptionUrl),
@@ -142,12 +167,24 @@ export const orderFulfillmentService = {
       configId = result.cfg.id;
       subscriptionUrl = pgUser.subscriptionUrl;
     } catch (err: unknown) {
-      logger.error({ err, orderId, username: pgUser.username }, 'DB transaction failed after PasarGuard user created during fulfillment — attempting compensating delete');
+      const isUuidCollision = (() => {
+        if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== 'P2002') return false;
+        const target = err.meta?.target;
+        if (Array.isArray(target)) return (target as string[]).some((f) => f === 'uuid' || f === 'subId');
+        if (typeof target === 'string') return target.includes('uuid') || target.includes('subId');
+        return false;
+      })();
+
+      logger.error({ err, orderId, username: pgUser.username, isUuidCollision }, 'DB transaction failed after PasarGuard user created during fulfillment — attempting compensating delete');
       try {
         await pasarguardClient.deleteUser(pgUser.username);
         logger.info({ username: pgUser.username }, 'Compensating delete succeeded');
       } catch (delErr) {
         logger.error({ delErr, username: pgUser.username }, 'Compensating delete FAILED — orphan user remains in panel');
+      }
+
+      if (isUuidCollision) {
+        return { ok: false, reason: 'uuid collision (panel ID reuse — try different username)', nameTaken: true };
       }
       return { ok: false, reason: 'DB transaction failed' };
     }
@@ -164,8 +201,8 @@ export const orderFulfillmentService = {
       durationDays: order.durationDays,
       subscriptionUrl,
       expireAt,
-      serverFlag: server.flag,
-      serverName: server.name,
+      serverFlag: serverDisplayFlag,
+      serverName: serverDisplayName,
     });
 
     // Channel log
@@ -177,8 +214,8 @@ export const orderFulfillmentService = {
       priceToman: order.priceToman,
       tonMemo: order.tonMemo,
       configId,
-      serverFlag: server.flag,
-      serverName: server.name,
+      serverFlag: serverDisplayFlag,
+      serverName: serverDisplayName,
     });
 
     return { ok: true, configId, subscriptionUrl };

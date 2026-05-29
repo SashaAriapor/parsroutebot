@@ -7,12 +7,14 @@ export interface IPasarGuardClient {
   resetUserTraffic(username: string): Promise<PasarGuardUser>;
   getUserUsed(username: string): Promise<{ usedBytes: bigint }>;
   listGroups(): Promise<Array<{ id: number; name: string }>>;
+  listServers(): Promise<Array<{ id: string; name: string; location: string }>>;
 }
 
 export type CreateUserParams = {
   username: string;
   dataLimitBytes: bigint;
   expireAt: Date | null;
+  groupId?: number;
 };
 
 export type ModifyUserParams = {

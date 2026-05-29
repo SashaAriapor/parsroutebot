@@ -1,6 +1,15 @@
 import { InlineKeyboard } from 'grammy';
-import { type Server } from '@prisma/client';
+import { type Server, type ServiceCategory } from '@prisma/client';
 import { formatToman, formatGB } from '@/lib/format';
+
+export function categoryListKeyboard(categories: ServiceCategory[]): InlineKeyboard {
+  const kb = new InlineKeyboard();
+  for (const cat of categories) {
+    kb.text(cat.nameFa, `buy:category:${cat.id}`).row();
+  }
+  kb.text('❌ انصراف', 'buy:cancel');
+  return kb;
+}
 
 export function gbPickerKeyboard(
   quickPicks: Array<{ gb: number; price: bigint }>,

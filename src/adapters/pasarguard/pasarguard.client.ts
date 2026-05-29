@@ -117,7 +117,7 @@ export class PasarGuardClient implements IPasarGuardClient {
       data_limit: params.dataLimitBytes === 0n ? 0 : Number(params.dataLimitBytes),
       expire: params.expireAt ? params.expireAt.toISOString() : null,
       status: 'active',
-      group_ids: [config.PASARGUARD_GROUP_ID],
+      group_ids: [params.groupId ?? config.PASARGUARD_GROUP_ID],
     };
 
     const raw = await this.request<any>('POST', '/api/user', body);
@@ -169,6 +169,11 @@ export class PasarGuardClient implements IPasarGuardClient {
   async listGroups(): Promise<Array<{ id: number; name: string }>> {
     const res = await this.request<any>('GET', '/api/groups/simple');
     return (res.groups ?? []).map((g: any) => ({ id: g.id, name: g.name }));
+  }
+
+  async listServers(): Promise<Array<{ id: string; name: string; location: string }>> {
+    const groups = await this.listGroups();
+    return groups.map((g) => ({ id: String(g.id), name: g.name, location: '' }));
   }
 
   private mapUser(raw: any): PasarGuardUser {

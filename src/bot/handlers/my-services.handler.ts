@@ -12,6 +12,7 @@ import { logger } from '@/lib/logger';
 import { escapeHtml, formatTehranTime } from '@/lib/html';
 import { formatBytes, formatGB, formatToman, formatDateIR, daysRemaining, progressBar } from '@/lib/format';
 import { generateQRBuffer } from '@/lib/qrcode';
+import { getServerDisplay } from '@/services/config.service';
 import {
   configListKeyboard,
   configDetailKeyboard,
@@ -53,7 +54,7 @@ function buildDetailText(
   const lines: string[] = [
     `🛡️ <b>سرویس #${cfg.id}</b>`,
     '',
-    `📍 سرور: ${cfg.server.flag ?? ''}${escapeHtml(cfg.server.name)}`,
+    `📍 سرور: ${escapeHtml(getServerDisplay(cfg))}`,
     `📊 وضعیت: ${statusBadge}`,
     '',
   ];

@@ -249,7 +249,7 @@ export function registerAdminUsersHandler(bot: Bot<BotContext>): void {
     let text = `📋 <b>سرویس‌های کاربر ${userId}</b>\n\n`;
     for (const c of configs) {
       const em = statusEmoji[c.status] ?? '⚫';
-      const server = `${c.server.flag ?? ''}${escapeHtml(c.server.name)}`;
+      const server = c.serverLabel ?? (c.server ? `${c.server.flag ?? ''}${escapeHtml(c.server.name)}` : '—');
       text += `${em} #${c.id} — ${server}\n`;
     }
 

@@ -4,7 +4,13 @@ import { pasarguardClient } from '@/adapters/pasarguard';
 import { NotFoundError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 
-export type VpnConfigWithServer = VpnConfig & { server: Server };
+export type VpnConfigWithServer = VpnConfig & { server: Server | null };
+
+export function getServerDisplay(cfg: VpnConfig & { server: Server | null }): string {
+  if (cfg.serverLabel) return cfg.serverLabel;
+  if (cfg.server) return `${cfg.server.flag ?? ''}${cfg.server.name}`;
+  return '—';
+}
 
 export const configService = {
   async listByUser(userId: bigint): Promise<VpnConfigWithServer[]> {
