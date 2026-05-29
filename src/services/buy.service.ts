@@ -336,7 +336,7 @@ export const buyService = {
             userId: params.userId,
             serverId: params.serverId ?? null,
             email: pgUser.username,
-            uuid: String(pgUser.id),
+            uuid: `${params.serverId ?? pgGroupId ?? 0}_${pgUser.id}`,
             subId: extractSubToken(pgUser.subscriptionUrl),
             subscriptionUrl: pgUser.subscriptionUrl,
             panelClientId: pgUser.id,

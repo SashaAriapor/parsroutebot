@@ -133,7 +133,7 @@ export const orderFulfillmentService = {
             serverId: order.serverId ?? null,
             serverLabel: serverDisplayName,
             email: pgUser.username,
-            uuid: String(pgUser.id),
+            uuid: `${order.serverId ?? pgGroupId ?? 0}_${pgUser.id}`,
             subId: extractSubToken(pgUser.subscriptionUrl),
             subscriptionUrl: pgUser.subscriptionUrl,
             panelClientId: pgUser.id,
