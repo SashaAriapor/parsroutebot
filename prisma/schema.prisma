@@ -80,6 +80,7 @@ model ServiceCategory {
   pricePerGb BigInt
   serverId   String
   serverName String
+  uuidPrefix String   @default("1")
   isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())
 

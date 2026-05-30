@@ -34,6 +34,7 @@ export const orderFulfillmentService = {
     let serverDisplayName: string;
     let serverDisplayFlag: string | null = null;
     let pgGroupId: number | undefined;
+    let uuidPrefix = '0';
 
     if (order.serverId) {
       const server = await prisma.server.findUnique({ where: { id: order.serverId } });
@@ -47,6 +48,7 @@ export const orderFulfillmentService = {
       }
       serverDisplayName = server.name;
       serverDisplayFlag = server.flag;
+      uuidPrefix = String(order.serverId);
     } else if (order.categoryId) {
       const category = await prisma.serviceCategory.findUnique({ where: { id: order.categoryId } });
       if (!category) {
@@ -59,6 +61,7 @@ export const orderFulfillmentService = {
       }
       serverDisplayName = category.serverName;
       pgGroupId = parseInt(category.serverId, 10) || undefined;
+      uuidPrefix = category.uuidPrefix;
     } else {
       logger.error({ orderId }, 'fulfill: order has no serverId or categoryId');
       return { ok: false, reason: 'no server or category on order' };
@@ -133,7 +136,7 @@ export const orderFulfillmentService = {
             serverId: order.serverId ?? null,
             serverLabel: serverDisplayName,
             email: pgUser.username,
-            uuid: `${order.serverId ?? pgGroupId ?? 0}_${pgUser.id}`,
+            uuid: `${uuidPrefix}_${pgUser.id}`,
             subId: extractSubToken(pgUser.subscriptionUrl),
             subscriptionUrl: pgUser.subscriptionUrl,
             panelClientId: pgUser.id,

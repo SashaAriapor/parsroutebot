@@ -262,15 +262,18 @@ export const buyService = {
     if (!user) return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
 
     let pgGroupId: number | undefined;
+    let uuidPrefix = '0';
     if (params.serverId) {
       const server = await prisma.server.findUnique({ where: { id: params.serverId } });
       if (!server) return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
       if (!server.isActive) return { ok: false, reason: 'این سرور دیگه فعال نیست.', code: 'SERVER_INACTIVE' };
+      uuidPrefix = String(params.serverId);
     } else if (params.categoryId) {
       const category = await prisma.serviceCategory.findUnique({ where: { id: params.categoryId } });
       if (!category) return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
       if (!category.isActive) return { ok: false, reason: 'این دسته‌بندی دیگه فعال نیست.', code: 'SERVER_INACTIVE' };
       pgGroupId = parseInt(category.serverId, 10) || undefined;
+      uuidPrefix = category.uuidPrefix;
     } else {
       return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
     }
@@ -336,7 +339,7 @@ export const buyService = {
             userId: params.userId,
             serverId: params.serverId ?? null,
             email: pgUser.username,
-            uuid: `${params.serverId ?? pgGroupId ?? 0}_${pgUser.id}`,
+            uuid: `${uuidPrefix}_${pgUser.id}`,
             subId: extractSubToken(pgUser.subscriptionUrl),
             subscriptionUrl: pgUser.subscriptionUrl,
             panelClientId: pgUser.id,
