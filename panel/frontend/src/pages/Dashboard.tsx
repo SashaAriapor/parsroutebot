@@ -1,13 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
 import { api } from '../lib/api';
 
 interface Overview {
@@ -22,16 +13,138 @@ interface ChartRow {
   revenue: string;
 }
 
+interface TopUser {
+  id: string;
+  username: string | null;
+  firstName: string | null;
+  totalSpent: string;
+  totalPurchases: number;
+}
+
 function fmt(toman: string) {
   const n = Number(BigInt(toman));
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M T';
+  if (n >= 1_000)     return (n / 1_000).toFixed(0) + 'K T';
   return n.toLocaleString('en-US') + ' T';
 }
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
+function initials(u: TopUser) {
+  const name = u.firstName ?? u.username ?? '?';
+  return name.slice(0, 2).toUpperCase();
+}
+
+const AVATAR_COLORS = [
+  ['var(--color-background-info)',    'var(--color-text-info)'],
+  ['var(--color-background-success)', 'var(--color-text-success)'],
+  ['var(--color-background-warning)', 'var(--color-text-warning)'],
+  ['var(--color-background-danger)',  'var(--color-text-danger)'],
+  ['var(--color-background-tertiary)','var(--color-text-secondary)'],
+];
+
+function MetricCard({
+  icon,
+  iconBg,
+  iconColor,
+  label,
+  value,
+  change,
+  up,
+}: {
+  icon: string;
+  iconBg: string;
+  iconColor: string;
+  label: string;
+  value: string | number;
+  change?: string;
+  up?: boolean;
+}) {
   return (
-    <div className="bg-white rounded-xl shadow p-6">
-      <p className="text-sm text-gray-500 mb-1">{label}</p>
-      <p className="text-2xl font-bold text-gray-800">{value}</p>
+    <div className="metric-card" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div
+          style={{
+            width: 36, height: 36,
+            borderRadius: 'var(--border-radius-md)',
+            background: iconBg,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <i className={`ti ${icon}`} style={{ color: iconColor, fontSize: '1rem' }} />
+        </div>
+        {change && (
+          <span className={`badge badge-sq ${up ? 'badge-success' : 'badge-danger'}`}>
+            <i className={`ti ${up ? 'ti-trending-up' : 'ti-trending-down'}`} style={{ fontSize: '0.65rem' }} />
+            {change}
+          </span>
+        )}
+      </div>
+      <div>
+        <div
+          style={{
+            fontSize: '1.375rem',
+            fontWeight: 700,
+            color: 'var(--color-text-primary)',
+            lineHeight: 1.2,
+          }}
+        >
+          {value}
+        </div>
+        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginTop: 2 }}>
+          {label}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SalesBarChart({ data }: { data: ChartRow[] }) {
+  const values = data.map((r) => Number(BigInt(r.revenue)));
+  const max = Math.max(...values, 1);
+
+  return (
+    <div>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-end',
+          gap: '3px',
+          height: '140px',
+        }}
+      >
+        {data.map((r, i) => {
+          const pct = Math.max((values[i] / max) * 100, 2);
+          const isLast = i === data.length - 1;
+          return (
+            <div
+              key={r.date}
+              title={`${r.date}: ${values[i].toLocaleString()} T`}
+              style={{
+                flex: 1,
+                height: `${pct}%`,
+                background: isLast
+                  ? 'var(--color-text-primary)'
+                  : 'var(--color-background-tertiary)',
+                borderRadius: '3px 3px 0 0',
+                cursor: 'default',
+                minHeight: 2,
+                transition: 'background 0.15s',
+              }}
+            />
+          );
+        })}
+      </div>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          marginTop: '0.5rem',
+          fontSize: '0.65rem',
+          color: 'var(--color-text-tertiary)',
+        }}
+      >
+        <span>{data[0]?.date}</span>
+        <span>{data[data.length - 1]?.date}</span>
+      </div>
     </div>
   );
 }
@@ -48,75 +161,191 @@ export function Dashboard() {
     queryFn: () => api.get('/stats/chart').then((r) => r.data),
   });
 
-  const topUsers = useQuery<{ id: string; username: string | null; firstName: string | null; totalSpent: string; totalPurchases: number }[]>({
+  const topUsers = useQuery<TopUser[]>({
     queryKey: ['stats-top-users'],
     queryFn: () => api.get('/stats/top-users').then((r) => r.data),
   });
 
   return (
-    <div className="space-y-8">
-      <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      {/* Metric cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
+        <MetricCard
+          icon="ti-users"
+          iconBg="var(--color-background-info)"
+          iconColor="var(--color-text-info)"
+          label="Total Users"
+          value={overview.data?.totalUsers ?? '—'}
+        />
+        <MetricCard
+          icon="ti-wifi"
+          iconBg="var(--color-background-success)"
+          iconColor="var(--color-text-success)"
+          label="Active Services"
+          value={overview.data?.activeServices ?? '—'}
+        />
+        <MetricCard
+          icon="ti-currency-dollar"
+          iconBg="var(--color-background-warning)"
+          iconColor="var(--color-text-warning)"
+          label="Revenue Today"
+          value={overview.data ? fmt(overview.data.revenueToday) : '—'}
+        />
+        <MetricCard
+          icon="ti-chart-bar"
+          iconBg="var(--color-background-danger)"
+          iconColor="var(--color-text-danger)"
+          label="This Month"
+          value={overview.data ? fmt(overview.data.revenueMonth) : '—'}
+        />
+      </div>
 
-      {overview.isLoading ? (
-        <p className="text-gray-400">Loading…</p>
-      ) : overview.data ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard label="Total Users" value={overview.data.totalUsers} />
-          <StatCard label="Active Services" value={overview.data.activeServices} />
-          <StatCard label="Revenue Today" value={fmt(overview.data.revenueToday)} />
-          <StatCard label="Revenue This Month" value={fmt(overview.data.revenueMonth)} />
+      {/* Bar chart */}
+      <div className="card" style={{ padding: '1.25rem' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '1rem',
+          }}
+        >
+          <span
+            style={{
+              fontSize: '0.875rem',
+              fontWeight: 600,
+              color: 'var(--color-text-primary)',
+            }}
+          >
+            Sales — last 30 days
+          </span>
+          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-tertiary)' }}>
+            Revenue (Toman)
+          </span>
         </div>
-      ) : null}
-
-      <div className="bg-white rounded-xl shadow p-6">
-        <h2 className="text-base font-semibold text-gray-700 mb-4">Revenue — last 30 days</h2>
-        {chart.data ? (
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={chart.data.map((r) => ({ ...r, rev: Number(BigInt(r.revenue)) }))}>
-              <defs>
-                <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => (v / 1000).toFixed(0) + 'K'} />
-              <Tooltip formatter={(v: number) => v.toLocaleString('en-US') + ' T'} />
-              <Area type="monotone" dataKey="rev" stroke="#6366f1" fill="url(#rev)" />
-            </AreaChart>
-          </ResponsiveContainer>
+        {chart.data && chart.data.length > 0 ? (
+          <SalesBarChart data={chart.data} />
         ) : (
-          <p className="text-gray-400 text-sm">Loading chart…</p>
+          <div className="empty-state" style={{ padding: '2rem' }}>
+            {chart.isLoading ? 'Loading chart…' : 'No data'}
+          </div>
         )}
       </div>
 
-      <div className="bg-white rounded-xl shadow p-6">
-        <h2 className="text-base font-semibold text-gray-700 mb-4">Top Customers</h2>
-        {topUsers.data ? (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-gray-500 border-b">
-                <th className="pb-2">ID</th>
-                <th className="pb-2">Name</th>
-                <th className="pb-2 text-right">Total Spent</th>
-                <th className="pb-2 text-right">Purchases</th>
-              </tr>
-            </thead>
-            <tbody>
-              {topUsers.data.map((u) => (
-                <tr key={u.id} className="border-b last:border-0">
-                  <td className="py-2 text-gray-400">{u.id}</td>
-                  <td className="py-2">{u.firstName ?? u.username ?? '—'}</td>
-                  <td className="py-2 text-right">{fmt(u.totalSpent)}</td>
-                  <td className="py-2 text-right">{u.totalPurchases}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p className="text-gray-400 text-sm">Loading…</p>
-        )}
+      {/* Bottom two columns */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+        {/* Top Customers */}
+        <div className="card">
+          <div
+            style={{
+              padding: '1rem 1.25rem',
+              borderBottom: '0.5px solid var(--color-border-tertiary)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+            }}
+          >
+            <i
+              className="ti ti-trophy"
+              style={{ color: 'var(--color-text-warning)', fontSize: '0.9rem' }}
+            />
+            <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>Top Customers</span>
+          </div>
+          {topUsers.isLoading ? (
+            <div className="empty-state">Loading…</div>
+          ) : (topUsers.data ?? []).length === 0 ? (
+            <div className="empty-state">No data</div>
+          ) : (
+            <div style={{ padding: '0.5rem 0' }}>
+              {(topUsers.data ?? []).map((u, i) => {
+                const [bg, fg] = AVATAR_COLORS[i % AVATAR_COLORS.length];
+                return (
+                  <div
+                    key={u.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      padding: '0.5rem 1.25rem',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 20,
+                        fontSize: '0.75rem',
+                        color: 'var(--color-text-tertiary)',
+                        fontWeight: 600,
+                        textAlign: 'right',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {i + 1}
+                    </span>
+                    <span
+                      className="avatar-initials"
+                      style={{ background: bg, color: fg }}
+                    >
+                      {initials(u)}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: '0.8125rem',
+                          fontWeight: 500,
+                          color: 'var(--color-text-primary)',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {u.firstName ?? u.username ?? u.id}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--color-text-tertiary)' }}>
+                        {u.totalPurchases} services
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        fontSize: '0.8125rem',
+                        fontWeight: 600,
+                        color: 'var(--color-text-primary)',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {fmt(u.totalSpent)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Top Referrers — placeholder */}
+        <div className="card">
+          <div
+            style={{
+              padding: '1rem 1.25rem',
+              borderBottom: '0.5px solid var(--color-border-tertiary)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+            }}
+          >
+            <i
+              className="ti ti-share"
+              style={{ color: 'var(--color-text-info)', fontSize: '0.9rem' }}
+            />
+            <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>Top Referrers</span>
+          </div>
+          <div className="empty-state">
+            <i
+              className="ti ti-link"
+              style={{ fontSize: '1.5rem', display: 'block', marginBottom: '0.5rem' }}
+            />
+            Referral data coming soon
+          </div>
+        </div>
       </div>
     </div>
   );

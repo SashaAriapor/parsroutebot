@@ -118,6 +118,7 @@ export class PasarGuardClient implements IPasarGuardClient {
       expire: params.expireAt ? params.expireAt.toISOString() : null,
       status: 'active',
       group_ids: [params.groupId ?? config.PASARGUARD_GROUP_ID],
+      hwid_limit: params.hwidLimit ?? 0,
     };
 
     const raw = await this.request<any>('POST', '/api/user', body);

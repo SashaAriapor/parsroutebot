@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "ServiceCategory" ADD COLUMN     "hwidLimit" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "unlimitedPrice" BIGINT NOT NULL DEFAULT 0,
+ADD COLUMN     "userChoosesGb" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "volumes" TEXT NOT NULL DEFAULT '';

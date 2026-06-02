@@ -15,6 +15,7 @@ export type CreateUserParams = {
   dataLimitBytes: bigint;
   expireAt: Date | null;
   groupId?: number;
+  hwidLimit?: number;
 };
 
 export type ModifyUserParams = {

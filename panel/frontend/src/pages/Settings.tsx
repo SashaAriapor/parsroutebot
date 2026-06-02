@@ -3,64 +3,284 @@ import { useState, useEffect, FormEvent } from 'react';
 import { api } from '../lib/api';
 
 type Settings = Record<string, string>;
+type TabKey = 'payment' | 'channel' | 'panel' | 'bot' | 'env';
 
-const FIELDS: { key: string; label: string; placeholder?: string }[] = [
-  { key: 'card_number', label: 'Card Number', placeholder: '6037-xxxx-xxxx-xxxx' },
-  { key: 'card_owner', label: 'Card Owner Name' },
-  { key: 'card_fee_percent', label: 'Card Fee %', placeholder: '15' },
-  { key: 'price_per_gb', label: 'Price Per GB (Toman)' },
-  { key: 'card_channel_id', label: 'Card Channel ID (for receipts)' },
-  { key: 'card_approver_ids', label: 'Card Approver IDs (comma-separated)' },
-  { key: 'required_channel_id', label: 'Required Channel ID (gate)' },
-  { key: 'required_channel_username', label: 'Required Channel Username (e.g. @channel)' },
-  { key: 'welcome_text', label: 'Welcome Message' },
+// ── Field groups ─────────────────────────────────────────────────────────────
+
+interface Field { key: string; label: string; placeholder?: string; type?: string; hint?: string }
+
+const PAYMENT_FIELDS: Field[] = [
+  { key: 'card_number',       label: 'Card Number',      placeholder: '6037-xxxx-xxxx-xxxx' },
+  { key: 'card_owner',        label: 'Card Owner Name' },
+  { key: 'card_fee_percent',  label: 'Card Fee %',       placeholder: '15', type: 'number' },
+  { key: 'price_per_gb',      label: 'Price per GB (Toman)', type: 'number' },
+  { key: 'card_channel_id',   label: 'Card Channel ID (for receipts)' },
+  { key: 'card_approver_ids', label: 'Approver IDs (comma-separated)', hint: 'Telegram user IDs who approve card payments' },
+  { key: 'ton_wallet_address',label: 'TON Wallet Address' },
+  { key: 'min_ton_amount',    label: 'Min TON Amount',   type: 'number', hint: 'Minimum TON accepted per transaction' },
 ];
 
-const BUY_FIELDS: { key: string; label: string; type: string; placeholder: string; hint?: string }[] = [
-  { key: 'PRICE_PER_GB_TOMAN', label: 'قیمت هر گیگابایت (تومان)', type: 'number', placeholder: '12000' },
-  { key: 'SERVICE_DURATION_DAYS', label: 'مدت سرویس (روز)', type: 'number', placeholder: '30' },
-  {
-    key: 'QUICK_PICK_GB',
-    label: 'گزینه‌های سریع گیگ (با کاما جدا کن)',
-    type: 'text',
-    placeholder: '1,5,10,20',
-    hint: 'مثال: 1,5,10,20 — حداکثر ۴ عدد',
-  },
+const CHANNEL_FIELDS: Field[] = [
+  { key: 'required_channel_id',       label: 'Channel ID',       placeholder: '-100xxxxxxxxxx' },
+  { key: 'required_channel_username', label: 'Channel Username',  placeholder: '@channel' },
 ];
 
-function validateBuyFields(form: Settings): string[] {
-  const errors: string[] = [];
+const PANEL_FIELDS: Field[] = [
+  { key: 'pasarguard_url',      label: 'Pasargad URL',     placeholder: 'https://…' },
+  { key: 'pasarguard_username', label: 'Username' },
+  { key: 'pasarguard_password', label: 'Password',         type: 'password' },
+];
 
-  const price = form['PRICE_PER_GB_TOMAN'];
-  if (price !== undefined && price !== '') {
-    const n = parseInt(price, 10);
-    if (!/^\d+$/.test(price.trim()) || isNaN(n) || n <= 0)
-      errors.push('قیمت هر گیگابایت باید عدد صحیح مثبت باشد');
-  }
+const BOT_FIELDS: Field[] = [
+  { key: 'admin_ids',  label: 'Admin IDs (comma-separated)', hint: 'Telegram user IDs with admin access' },
+  { key: 'panel_port', label: 'Panel Port', type: 'number', placeholder: '3001' },
+];
 
-  const duration = form['SERVICE_DURATION_DAYS'];
-  if (duration !== undefined && duration !== '') {
-    const n = parseInt(duration, 10);
-    if (!/^\d+$/.test(duration.trim()) || isNaN(n) || n <= 0)
-      errors.push('مدت سرویس باید عدد صحیح مثبت باشد');
-  }
+// ── Section form ─────────────────────────────────────────────────────────────
 
-  const quickPick = form['QUICK_PICK_GB'];
-  if (quickPick !== undefined && quickPick !== '') {
-    const raw = quickPick.split(',').map((s) => s.trim()).filter((s) => s !== '');
-    const valid = raw.map((s) => parseInt(s, 10)).filter((n) => !isNaN(n) && n > 0);
-    if (valid.length !== raw.length || valid.length < 1 || valid.length > 4)
-      errors.push('گزینه‌های سریع باید ۱ تا ۴ عدد صحیح مثبت با کاما جدا باشند');
-  }
+function FieldForm({
+  fields,
+  form,
+  setForm,
+  onSave,
+  saving,
+  saved,
+  error,
+  extra,
+}: {
+  fields: Field[];
+  form: Settings;
+  setForm: React.Dispatch<React.SetStateAction<Settings>>;
+  onSave: (e: FormEvent) => void;
+  saving: boolean;
+  saved: boolean;
+  error: string;
+  extra?: React.ReactNode;
+}) {
+  return (
+    <form onSubmit={onSave} style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+      {fields.map(({ key, label, placeholder, type, hint }) => (
+        <div key={key}>
+          <label className="form-label">{label}</label>
+          <input
+            type={type ?? 'text'}
+            className="form-input"
+            value={form[key] ?? ''}
+            onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+            placeholder={placeholder}
+          />
+          {hint && (
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-tertiary)', marginTop: 3 }}>
+              {hint}
+            </div>
+          )}
+        </div>
+      ))}
 
-  return errors;
+      {extra}
+
+      {error && (
+        <div
+          style={{
+            padding: '0.5rem 0.75rem',
+            borderRadius: 'var(--border-radius-md)',
+            background: 'var(--color-background-danger)',
+            color: 'var(--color-text-danger)',
+            fontSize: '0.8125rem',
+          }}
+        >
+          {error}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', paddingTop: '0.25rem' }}>
+        <button type="submit" disabled={saving} className="btn btn-primary btn-sm">
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+        {saved && (
+          <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-success)', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <i className="ti ti-check" />
+            Saved
+          </span>
+        )}
+      </div>
+    </form>
+  );
 }
 
+// ── Env tab ───────────────────────────────────────────────────────────────────
+
+interface EnvEntry { key: string; value: string; masked: boolean }
+
+function EnvTab() {
+  const { data, isLoading, refetch } = useQuery<{ entries: EnvEntry[] }>({
+    queryKey: ['env'],
+    queryFn: () => api.get('/settings/env').then((r) => r.data),
+  });
+
+  const [edits, setEdits]       = useState<Record<string, string>>({});
+  const [visible, setVisible]   = useState<Set<string>>(new Set());
+  const [saving, setSaving]     = useState(false);
+  const [result, setResult]     = useState<{ ok: boolean; msg: string } | null>(null);
+
+  const entries = data?.entries ?? [];
+
+  const handleSave = async () => {
+    const all: Record<string, string> = {};
+    for (const e of entries) {
+      all[e.key] = edits[e.key] ?? e.value;
+    }
+    setSaving(true);
+    setResult(null);
+    try {
+      const r = await api.patch<{ ok: boolean; updated: number; restarting: boolean }>(
+        '/settings/env',
+        { updates: all },
+      );
+      if (r.data.ok) {
+        setResult({
+          ok: true,
+          msg: r.data.restarting
+            ? `${r.data.updated} variable(s) saved — restarting service…`
+            : 'No changes applied',
+        });
+        refetch();
+        setEdits({});
+      }
+    } catch {
+      setResult({ ok: false, msg: 'Failed to save' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (isLoading) return <div className="empty-state">Loading…</div>;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+      <p style={{ margin: 0, fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
+        After saving, the service restarts automatically.
+      </p>
+
+      <div className="card" style={{ overflow: 'hidden' }}>
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th style={{ width: '38%' }}>Variable</th>
+              <th>Value</th>
+              <th style={{ width: 44 }} />
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map((entry) => {
+              const current  = edits[entry.key] ?? entry.value;
+              const isEdited = edits[entry.key] !== undefined && edits[entry.key] !== entry.value;
+              const isVisible = visible.has(entry.key);
+
+              return (
+                <tr
+                  key={entry.key}
+                  style={isEdited ? { background: 'var(--color-background-info)' } : undefined}
+                >
+                  <td>
+                    <span className="mono" style={{ fontSize: '0.75rem', color: 'var(--color-text-primary)' }}>
+                      {entry.key}
+                    </span>
+                    {entry.masked && (
+                      <span
+                        className="badge badge-sq badge-warning"
+                        style={{ marginLeft: '0.375rem', fontSize: '0.6rem' }}
+                      >
+                        sensitive
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ padding: '0.5rem 1rem' }}>
+                    <input
+                      type={entry.masked && !isVisible ? 'password' : 'text'}
+                      className="form-input mono"
+                      style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+                      value={current}
+                      onChange={(e) => setEdits((prev) => ({ ...prev, [entry.key]: e.target.value }))}
+                      placeholder={entry.masked ? 'Enter new value' : ''}
+                    />
+                  </td>
+                  <td style={{ padding: '0.5rem 0.5rem', textAlign: 'center' }}>
+                    {entry.masked && (
+                      <button
+                        type="button"
+                        className="btn-icon"
+                        style={{ padding: '0.25rem' }}
+                        onClick={() =>
+                          setVisible((s) => {
+                            const n = new Set(s);
+                            n.has(entry.key) ? n.delete(entry.key) : n.add(entry.key);
+                            return n;
+                          })
+                        }
+                        title={isVisible ? 'Hide' : 'Show'}
+                      >
+                        <i
+                          className={`ti ${isVisible ? 'ti-eye-off' : 'ti-eye'}`}
+                          style={{ fontSize: '0.8125rem' }}
+                        />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {result && (
+        <div
+          style={{
+            padding: '0.5rem 0.75rem',
+            borderRadius: 'var(--border-radius-md)',
+            background: result.ok ? 'var(--color-background-success)' : 'var(--color-background-danger)',
+            color: result.ok ? 'var(--color-text-success)' : 'var(--color-text-danger)',
+            fontSize: '0.8125rem',
+          }}
+        >
+          <i className={`ti ${result.ok ? 'ti-check' : 'ti-alert-circle'}`} style={{ marginRight: '0.375rem' }} />
+          {result.msg}
+        </div>
+      )}
+
+      <div>
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          onClick={handleSave}
+          disabled={saving}
+        >
+          {saving ? 'Saving…' : 'Save & Restart'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Settings ─────────────────────────────────────────────────────────────
+
+const TABS: { key: TabKey; label: string; icon: string }[] = [
+  { key: 'payment', label: 'Payment',     icon: 'ti-credit-card' },
+  { key: 'channel', label: 'Channel Gate',icon: 'ti-broadcast' },
+  { key: 'panel',   label: 'Panel',       icon: 'ti-server' },
+  { key: 'bot',     label: 'Bot',         icon: 'ti-brand-telegram' },
+  { key: 'env',     label: 'Environment', icon: 'ti-terminal-2' },
+];
+
+
 export function Settings() {
-  const qc = useQueryClient();
+  const qc              = useQueryClient();
+  const [tab, setTab]   = useState<TabKey>('payment');
   const [form, setForm] = useState<Settings>({});
   const [saved, setSaved] = useState(false);
-  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [error, setError] = useState('');
+  const [channelEnabled, setChannelEnabled] = useState(false);
 
   const { data, isLoading } = useQuery<Settings>({
     queryKey: ['settings'],
@@ -68,7 +288,10 @@ export function Settings() {
   });
 
   useEffect(() => {
-    if (data) setForm(data);
+    if (data) {
+      setForm(data);
+      setChannelEnabled(data['channel_gate_enabled'] === 'true');
+    }
   }, [data]);
 
   const mutation = useMutation({
@@ -78,85 +301,188 @@ export function Settings() {
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     },
+    onError: () => setError('Failed to save settings'),
   });
 
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    const errors = validateBuyFields(form);
-    if (errors.length > 0) {
-      setValidationErrors(errors);
-      return;
-    }
-    setValidationErrors([]);
-    mutation.mutate(form);
+  function handleSave(fields: Field[]) {
+    return (e: FormEvent) => {
+      e.preventDefault();
+      setError('');
+      const patch: Settings = {};
+      for (const { key } of fields) {
+        patch[key] = form[key] ?? '';
+      }
+      mutation.mutate(patch);
+    };
   }
 
-  if (isLoading) return <p className="text-gray-400">Loading…</p>;
+  function handleChannelSave(e: FormEvent) {
+    e.preventDefault();
+    setError('');
+    mutation.mutate({
+      required_channel_id:       form['required_channel_id'] ?? '',
+      required_channel_username: form['required_channel_username'] ?? '',
+      channel_gate_enabled:      String(channelEnabled),
+    });
+  }
+
+  async function handleTestConnection() {
+    try {
+      const r = await api.get('/health');
+      const status = r.data?.pasarguard?.status ?? 'error';
+      setError(status === 'ok' ? '' : 'Connection test failed');
+      if (status === 'ok') { setSaved(true); setTimeout(() => setSaved(false), 2000); }
+    } catch {
+      setError('Connection test failed');
+    }
+  }
+
+  if (isLoading) return <div className="empty-state">Loading…</div>;
 
   return (
-    <div className="space-y-6 max-w-2xl">
-      <h1 className="text-2xl font-bold text-gray-800">Settings</h1>
-
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow p-6 space-y-5">
-        {FIELDS.map(({ key, label, placeholder }) => (
-          <div key={key}>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-            {key === 'welcome_text' ? (
-              <textarea
-                value={form[key] ?? ''}
-                onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                rows={4}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            ) : (
-              <input
-                type="text"
-                value={form[key] ?? ''}
-                onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                placeholder={placeholder}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            )}
-          </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: 640 }}>
+      {/* Tab bar */}
+      <div className="tab-bar">
+        {TABS.map(({ key, label, icon }) => (
+          <button
+            key={key}
+            className={`tab-btn${tab === key ? ' active' : ''}`}
+            onClick={() => { setTab(key); setError(''); setSaved(false); }}
+          >
+            <i className={`ti ${icon}`} style={{ marginRight: '0.3rem', fontSize: '0.875rem' }} />
+            {label}
+          </button>
         ))}
+      </div>
 
-        <div className="border-t border-gray-200 pt-5" dir="rtl">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">تنظیمات خرید</h2>
-          {BUY_FIELDS.map(({ key, label, type, placeholder, hint }) => (
-            <div key={key} className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-              <input
-                type={type}
-                value={form[key] ?? ''}
-                onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                placeholder={placeholder}
-                min={type === 'number' ? 1 : undefined}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                dir="ltr"
-              />
-              {hint && <small className="text-gray-500 text-xs mt-1 block">{hint}</small>}
-            </div>
-          ))}
-        </div>
-
-        {validationErrors.length > 0 && (
-          <ul className="text-sm text-red-600 space-y-1 list-disc list-inside" dir="rtl">
-            {validationErrors.map((err, i) => <li key={i}>{err}</li>)}
-          </ul>
+      {/* Tab content */}
+      <div className="card" style={{ padding: '1.25rem' }}>
+        {tab === 'payment' && (
+          <FieldForm
+            fields={PAYMENT_FIELDS}
+            form={form}
+            setForm={setForm}
+            onSave={handleSave(PAYMENT_FIELDS)}
+            saving={mutation.isPending}
+            saved={saved}
+            error={error}
+          />
         )}
 
-        <div className="flex items-center gap-3 pt-2">
-          <button
-            type="submit"
-            disabled={mutation.isPending}
-            className="bg-indigo-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
-          >
-            {mutation.isPending ? 'Saving…' : 'Save Settings'}
-          </button>
-          {saved && <span className="text-sm text-green-600">Saved!</span>}
-          {mutation.isError && <span className="text-sm text-red-600">Save failed.</span>}
-        </div>
-      </form>
+        {tab === 'channel' && (
+          <form onSubmit={handleChannelSave} style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem', background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', marginBottom: '0.25rem' }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--color-text-primary)' }}>
+                  Channel Gate
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginTop: 2 }}>
+                  Require users to join a channel before using the bot
+                </div>
+              </div>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={channelEnabled}
+                  onChange={(e) => setChannelEnabled(e.target.checked)}
+                />
+                <span className="toggle-track" />
+              </label>
+            </div>
+
+            {CHANNEL_FIELDS.map(({ key, label, placeholder }) => (
+              <div key={key}>
+                <label className="form-label">{label}</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={form[key] ?? ''}
+                  onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                  placeholder={placeholder}
+                  disabled={!channelEnabled}
+                />
+              </div>
+            ))}
+
+            {error && (
+              <div style={{ padding: '0.5rem 0.75rem', borderRadius: 'var(--border-radius-md)', background: 'var(--color-background-danger)', color: 'var(--color-text-danger)', fontSize: '0.8125rem' }}>
+                {error}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <button type="submit" disabled={mutation.isPending} className="btn btn-primary btn-sm">
+                {mutation.isPending ? 'Saving…' : 'Save'}
+              </button>
+              {saved && (
+                <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-success)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <i className="ti ti-check" /> Saved
+                </span>
+              )}
+            </div>
+          </form>
+        )}
+
+        {tab === 'panel' && (
+          <FieldForm
+            fields={PANEL_FIELDS}
+            form={form}
+            setForm={setForm}
+            onSave={handleSave(PANEL_FIELDS)}
+            saving={mutation.isPending}
+            saved={saved}
+            error={error}
+            extra={
+              <div>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={handleTestConnection}
+                >
+                  <i className="ti ti-plug" />
+                  Test Connection
+                </button>
+              </div>
+            }
+          />
+        )}
+
+        {tab === 'bot' && (
+          <>
+            {/* Welcome message field */}
+            <div style={{ marginBottom: '0.875rem' }}>
+              <label className="form-label">Welcome Message</label>
+              <textarea
+                className="form-textarea"
+                value={form['welcome_text'] ?? ''}
+                onChange={(e) => setForm((f) => ({ ...f, welcome_text: e.target.value }))}
+                rows={4}
+                dir="rtl"
+              />
+            </div>
+
+            <FieldForm
+              fields={BOT_FIELDS}
+              form={form}
+              setForm={setForm}
+              onSave={(e) => {
+                e.preventDefault();
+                setError('');
+                const patch: Settings = { welcome_text: form['welcome_text'] ?? '' };
+                for (const { key } of BOT_FIELDS) {
+                  patch[key] = form[key] ?? '';
+                }
+                mutation.mutate(patch);
+              }}
+              saving={mutation.isPending}
+              saved={saved}
+              error={error}
+            />
+          </>
+        )}
+
+        {tab === 'env' && <EnvTab />}
+      </div>
     </div>
   );
 }

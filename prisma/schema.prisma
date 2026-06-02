@@ -75,14 +75,18 @@ enum AdminActionType {
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 model ServiceCategory {
-  id         Int      @id @default(autoincrement())
-  nameFa     String
-  pricePerGb BigInt
-  serverId   String
-  serverName String
-  uuidPrefix String   @default("1")
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
+  id             Int      @id @default(autoincrement())
+  nameFa         String
+  pricePerGb     BigInt
+  serverId       String
+  serverName     String
+  uuidPrefix     String   @default("1")
+  hwidLimit      Int      @default(0)
+  userChoosesGb  Boolean  @default(true)
+  volumes        String   @default("")
+  unlimitedPrice BigInt   @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
 
   orders Order[]
 }

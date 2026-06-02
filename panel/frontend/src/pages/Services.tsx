@@ -20,21 +20,21 @@ interface ListResp {
   limit: number;
 }
 
-const filters = ['all', 'active', 'expired', 'disabled'] as const;
-type Filter = (typeof filters)[number];
+const FILTERS = ['all', 'active', 'expired', 'disabled'] as const;
+type Filter = (typeof FILTERS)[number];
 
-const STATUS_COLORS: Record<string, string> = {
-  ACTIVE: 'bg-green-100 text-green-700',
-  EXPIRED: 'bg-gray-100 text-gray-600',
-  DISABLED: 'bg-yellow-100 text-yellow-700',
-  DELETED: 'bg-red-100 text-red-700',
+const STATUS_BADGE: Record<string, string> = {
+  ACTIVE:   'badge-success',
+  EXPIRED:  'badge-neutral',
+  DISABLED: 'badge-warning',
+  DELETED:  'badge-danger',
 };
 
 export function Services() {
-  const qc = useQueryClient();
-  const [page, setPage] = useState(1);
-  const [filter, setFilter] = useState<Filter>('all');
-  const [extendDays, setExtendDays] = useState<Record<number, string>>({});
+  const qc                                      = useQueryClient();
+  const [page, setPage]                         = useState(1);
+  const [filter, setFilter]                     = useState<Filter>('all');
+  const [extendDays, setExtendDays]             = useState<Record<number, string>>({});
 
   const { data, isLoading } = useQuery<ListResp>({
     queryKey: ['services', page, filter],
@@ -43,8 +43,7 @@ export function Services() {
   });
 
   const patchMutation = useMutation({
-    mutationFn: ({ id, body }: { id: number; body: object }) =>
-      api.patch(`/services/${id}`, body),
+    mutationFn: ({ id, body }: { id: number; body: object }) => api.patch(`/services/${id}`, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['services'] }),
   });
 
@@ -56,134 +55,173 @@ export function Services() {
   const totalPages = data ? Math.ceil(data.total / 20) : 1;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-800">Services</h1>
-        <div className="flex gap-1">
-          {filters.map((f) => (
-            <button
-              key={f}
-              onClick={() => { setFilter(f); setPage(1); }}
-              className={`capitalize text-xs px-3 py-1.5 rounded-lg border ${
-                filter === f
-                  ? 'bg-indigo-600 text-white border-indigo-600'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              {f}
-            </button>
-          ))}
-        </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      {/* Filter bar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+        {FILTERS.map((f) => (
+          <button
+            key={f}
+            onClick={() => { setFilter(f); setPage(1); }}
+            className={`btn btn-sm ${filter === f ? 'btn-primary' : 'btn-ghost'}`}
+            style={{ textTransform: 'capitalize' }}
+          >
+            {f}
+          </button>
+        ))}
+        {data && (
+          <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-tertiary)', marginLeft: 'auto' }}>
+            {data.total.toLocaleString()} services
+          </span>
+        )}
       </div>
 
-      {isLoading ? (
-        <p className="text-gray-400">Loading…</p>
-      ) : (
-        <div className="bg-white rounded-xl shadow overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
-              <tr>
-                <th className="px-4 py-3 text-left">Email</th>
-                <th className="px-4 py-3 text-left">User</th>
-                <th className="px-4 py-3 text-left">Server</th>
-                <th className="px-4 py-3 text-right">GB</th>
-                <th className="px-4 py-3 text-left">Expiry</th>
-                <th className="px-4 py-3 text-center">Status</th>
-                <th className="px-4 py-3 text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {data?.data.map((s) => (
-                <tr key={s.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-mono text-xs text-gray-600">{s.email}</td>
-                  <td className="px-4 py-3 text-gray-700">
-                    {s.user.firstName ?? s.user.username ?? s.user.id}
-                  </td>
-                  <td className="px-4 py-3 text-gray-500">
-                    {s.server.flag} {s.server.name}
-                  </td>
-                  <td className="px-4 py-3 text-right">{s.totalGB}</td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">
-                    {s.expiryAt ? new Date(s.expiryAt).toLocaleDateString() : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[s.status] ?? ''}`}>
-                      {s.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1 justify-center">
-                      <input
-                        type="number"
-                        min="1"
-                        value={extendDays[s.id] ?? ''}
-                        onChange={(e) => setExtendDays((prev) => ({ ...prev, [s.id]: e.target.value }))}
-                        placeholder="days"
-                        className="w-14 border rounded text-xs px-1 py-0.5 text-center"
-                      />
-                      <button
-                        onClick={() =>
-                          patchMutation.mutate({
-                            id: s.id,
-                            body: { extendDays: parseInt(extendDays[s.id] ?? '0', 10) },
-                          })
-                        }
-                        disabled={!extendDays[s.id]}
-                        className="text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-40"
-                      >
-                        Extend
-                      </button>
-                      <button
-                        onClick={() =>
-                          patchMutation.mutate({
-                            id: s.id,
-                            body: { status: s.status === 'DISABLED' ? 'ACTIVE' : 'DISABLED' },
-                          })
-                        }
-                        className="text-xs px-2 py-0.5 rounded bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
-                      >
-                        {s.status === 'DISABLED' ? 'Enable' : 'Disable'}
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm(`Delete service ${s.email}?`)) deleteMutation.mutate(s.id);
-                        }}
-                        className="text-xs px-2 py-0.5 rounded bg-red-50 text-red-700 hover:bg-red-100"
-                      >
-                        Del
-                      </button>
-                    </div>
-                  </td>
+      {/* Table */}
+      <div className="card" style={{ overflow: 'hidden' }}>
+        {isLoading ? (
+          <div className="empty-state">Loading…</div>
+        ) : (data?.data.length ?? 0) === 0 ? (
+          <div className="empty-state">No services found.</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Account</th>
+                  <th>User</th>
+                  <th>Category</th>
+                  <th style={{ textAlign: 'right' }}>Volume</th>
+                  <th>Expires</th>
+                  <th style={{ textAlign: 'center' }}>Status</th>
+                  <th style={{ textAlign: 'center' }}>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data?.data.map((s) => (
+                  <tr key={s.id}>
+                    <td>
+                      <span
+                        className="mono"
+                        style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}
+                      >
+                        {s.email}
+                      </span>
+                    </td>
+                    <td style={{ color: 'var(--color-text-secondary)' }}>
+                      {s.user.firstName ?? s.user.username ?? s.user.id}
+                    </td>
+                    <td style={{ color: 'var(--color-text-secondary)' }}>
+                      {s.server.flag ? `${s.server.flag} ` : ''}{s.server.name}
+                    </td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      {s.totalGB} GB
+                    </td>
+                    <td style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
+                      {s.expiryAt ? new Date(s.expiryAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <span className={`badge ${STATUS_BADGE[s.status] ?? 'badge-neutral'}`}>
+                        {s.status}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', justifyContent: 'center' }}>
+                        <input
+                          type="number"
+                          min="1"
+                          value={extendDays[s.id] ?? ''}
+                          onChange={(e) =>
+                            setExtendDays((prev) => ({ ...prev, [s.id]: e.target.value }))
+                          }
+                          placeholder="days"
+                          className="form-input"
+                          style={{ width: 60, padding: '0.25rem 0.375rem', fontSize: '0.75rem', textAlign: 'center' }}
+                        />
+                        <button
+                          onClick={() =>
+                            patchMutation.mutate({
+                              id: s.id,
+                              body: { extendDays: parseInt(extendDays[s.id] ?? '0', 10) },
+                            })
+                          }
+                          disabled={!extendDays[s.id]}
+                          className="btn btn-sm"
+                          style={{
+                            background: 'var(--color-background-info)',
+                            color: 'var(--color-text-info)',
+                            border: '0.5px solid rgba(37,99,235,0.15)',
+                          }}
+                        >
+                          Extend
+                        </button>
+                        <button
+                          onClick={() =>
+                            patchMutation.mutate({
+                              id: s.id,
+                              body: { status: s.status === 'DISABLED' ? 'ACTIVE' : 'DISABLED' },
+                            })
+                          }
+                          className="btn btn-sm"
+                          style={{
+                            background: 'var(--color-background-warning)',
+                            color: 'var(--color-text-warning)',
+                            border: '0.5px solid rgba(217,119,6,0.15)',
+                          }}
+                        >
+                          {s.status === 'DISABLED' ? 'Enable' : 'Disable'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm(`Delete service ${s.email}?`)) deleteMutation.mutate(s.id);
+                          }}
+                          className="btn btn-danger btn-sm"
+                        >
+                          Del
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-          {data && totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50">
-              <span className="text-xs text-gray-500">
-                {data.total} services · page {page} of {totalPages}
-              </span>
-              <div className="flex gap-1">
-                <button
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => p - 1)}
-                  className="text-xs px-3 py-1 border rounded disabled:opacity-40 hover:bg-gray-100"
-                >
-                  Prev
-                </button>
-                <button
-                  disabled={page >= totalPages}
-                  onClick={() => setPage((p) => p + 1)}
-                  className="text-xs px-3 py-1 border rounded disabled:opacity-40 hover:bg-gray-100"
-                >
-                  Next
-                </button>
-              </div>
+        {/* Pagination */}
+        {data && totalPages > 1 && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '0.75rem 1rem',
+              borderTop: '0.5px solid var(--color-border-tertiary)',
+              background: 'var(--color-background-secondary)',
+            }}
+          >
+            <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-tertiary)' }}>
+              Page {page} of {totalPages} · {data.total} total
+            </span>
+            <div style={{ display: 'flex', gap: '0.375rem' }}>
+              <button
+                disabled={page <= 1}
+                onClick={() => setPage((p) => p - 1)}
+                className="btn btn-ghost btn-sm"
+              >
+                <i className="ti ti-chevron-left" />
+                Prev
+              </button>
+              <button
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+                className="btn btn-ghost btn-sm"
+              >
+                Next
+                <i className="ti ti-chevron-right" />
+              </button>
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

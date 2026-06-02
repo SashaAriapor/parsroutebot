@@ -1,6 +1,7 @@
 export type BuyState = {
   categoryId?: number;
   categoryServerName?: string;
+  userChoosesGb?: boolean;
   trafficGB?: number;
   durationDays?: number;
   pricePerGB?: bigint;

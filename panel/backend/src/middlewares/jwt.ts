@@ -10,7 +10,8 @@ declare module 'hono' {
 export function jwtMiddleware(secret: string): MiddlewareHandler {
   return async (c, next) => {
     const authHeader = c.req.header('Authorization');
-    const token = authHeader?.replace('Bearer ', '');
+    // Also accept ?token= query param for SSE (EventSource can't set headers)
+    const token = authHeader?.replace('Bearer ', '') ?? c.req.query('token');
 
     if (!token) {
       return c.json({ error: 'Unauthorized' }, 401);

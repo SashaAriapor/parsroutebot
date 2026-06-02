@@ -35,6 +35,7 @@ export const orderFulfillmentService = {
     let serverDisplayFlag: string | null = null;
     let pgGroupId: number | undefined;
     let uuidPrefix = '0';
+    let hwidLimit = 0;
 
     if (order.serverId) {
       const server = await prisma.server.findUnique({ where: { id: order.serverId } });
@@ -62,6 +63,7 @@ export const orderFulfillmentService = {
       serverDisplayName = category.serverName;
       pgGroupId = parseInt(category.serverId, 10) || undefined;
       uuidPrefix = category.uuidPrefix;
+      hwidLimit = category.hwidLimit;
     } else {
       logger.error({ orderId }, 'fulfill: order has no serverId or categoryId');
       return { ok: false, reason: 'no server or category on order' };
@@ -80,6 +82,7 @@ export const orderFulfillmentService = {
         dataLimitBytes: gbToBytes(order.trafficGB),
         expireAt,
         groupId: pgGroupId,
+        hwidLimit,
       });
     } catch (err) {
       const errMsg = (err instanceof Error ? err.message : String(err)).toLowerCase();
@@ -125,7 +128,7 @@ export const orderFulfillmentService = {
               amountToman: -order.priceToman,
               balanceAfter: newBalance,
               orderId: order.id,
-              description: `خرید ${order.trafficGB} گیگابایت`,
+              description: `خرید ${order.trafficGB > 0 ? `${order.trafficGB} گیگابایت` : 'نامحدود'}`,
             },
           });
         }

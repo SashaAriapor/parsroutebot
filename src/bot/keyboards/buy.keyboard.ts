@@ -11,6 +11,29 @@ export function categoryListKeyboard(categories: ServiceCategory[]): InlineKeybo
   return kb;
 }
 
+export function volumePickerKeyboard(
+  picks: Array<{ gb: number; price: bigint }>,
+): InlineKeyboard {
+  const kb = new InlineKeyboard();
+  for (let i = 0; i < picks.length; i += 2) {
+    const a = picks[i];
+    const b = picks[i + 1];
+    const labelA = a.gb === 0
+      ? `♾️ نامحدود — ${formatToman(a.price)}`
+      : `📦 ${formatGB(a.gb)} — ${formatToman(a.price)}`;
+    if (b) {
+      const labelB = b.gb === 0
+        ? `♾️ نامحدود — ${formatToman(b.price)}`
+        : `📦 ${formatGB(b.gb)} — ${formatToman(b.price)}`;
+      kb.text(labelA, `buy:vol:${a.gb}`).text(labelB, `buy:vol:${b.gb}`).row();
+    } else {
+      kb.text(labelA, `buy:vol:${a.gb}`).row();
+    }
+  }
+  kb.text('❌ انصراف', 'buy:cancel');
+  return kb;
+}
+
 export function gbPickerKeyboard(
   quickPicks: Array<{ gb: number; price: bigint }>,
 ): InlineKeyboard {

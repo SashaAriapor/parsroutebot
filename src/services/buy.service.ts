@@ -15,6 +15,7 @@ type ExecuteParams = {
   trafficGB: number;
   durationDays: number;
   pricePerGB: bigint;
+  basePriceToman?: bigint;
   discountCode?: string;
   finalPriceToman: bigint;
 };
@@ -44,6 +45,7 @@ type PendingTonOrderParams = {
   trafficGB: number;
   durationDays: number;
   pricePerGB: bigint;
+  basePriceToman?: bigint;
   discountCode?: string;
   finalPriceToman: bigint;
 };
@@ -63,6 +65,7 @@ type PendingCardOrderParams = {
   trafficGB: number;
   durationDays: number;
   pricePerGB: bigint;
+  basePriceToman?: bigint;
   discountCode?: string;
   finalPriceToman: bigint;
   cardFeePercent: number;
@@ -86,7 +89,7 @@ export const buyService = {
       return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
     }
 
-    const basePriceToman = params.pricePerGB * BigInt(params.trafficGB);
+    const basePriceToman = params.basePriceToman ?? (params.pricePerGB * BigInt(params.trafficGB));
 
     if (params.discountCode) {
       const dcCheck = await discountService.validate(params.discountCode, params.userId, null, basePriceToman);
@@ -149,7 +152,7 @@ export const buyService = {
       return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
     }
 
-    const basePriceToman = params.pricePerGB * BigInt(params.trafficGB);
+    const basePriceToman = params.basePriceToman ?? (params.pricePerGB * BigInt(params.trafficGB));
 
     if (params.discountCode) {
       const dcCheck = await discountService.validate(params.discountCode, params.userId, null, basePriceToman);
@@ -186,7 +189,7 @@ export const buyService = {
   },
 
   async createPendingWalletOrder(params: ExecuteParams): Promise<WalletOrderResult> {
-    const basePriceToman = params.pricePerGB * BigInt(params.trafficGB);
+    const basePriceToman = params.basePriceToman ?? (params.pricePerGB * BigInt(params.trafficGB));
 
     const user = await prisma.user.findUnique({ where: { id: params.userId } });
     if (!user) return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };

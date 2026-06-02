@@ -10,6 +10,10 @@ import { statsRouter } from './routes/stats';
 import { usersRouter } from './routes/users';
 import { servicesRouter } from './routes/services';
 import { settingsRouter } from './routes/settings';
+import { categoriesRouter } from './routes/categories';
+import { envRouter } from './routes/env';
+import { logsRouter } from './routes/logs';
+import { healthRouter } from './routes/health';
 
 export function startPanel(opts: {
   port: number;
@@ -35,6 +39,10 @@ export function startPanel(opts: {
   app.route('/api/users', usersRouter);
   app.route('/api/services', servicesRouter);
   app.route('/api/settings', settingsRouter);
+  app.route('/api/settings/env', envRouter);
+  app.route('/api/categories', categoriesRouter);
+  app.route('/api/logs', logsRouter);
+  app.route('/api/health', healthRouter);
 
   // Serve compiled frontend in production — path is relative to cwd (project root)
   const staticDir = path.resolve(process.cwd(), 'panel/frontend/dist');
