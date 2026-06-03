@@ -75,6 +75,7 @@ export function Logs() {
   const [logs, setLogs]               = useState<LogEntry[]>([]);
   const [loading, setLoading]         = useState(true);
   const [autoScroll, setAutoScroll]   = useState(true);
+  const [hideXray, setHideXray]       = useState(true);
   const [expanded, setExpanded]       = useState<Set<number>>(new Set());
   const bottomRef                     = useRef<HTMLDivElement>(null);
   const esRef                         = useRef<EventSource | null>(null);
@@ -118,6 +119,10 @@ export function Logs() {
     });
   };
 
+  const displayedLogs = hideXray
+    ? logs.filter((log) => !(log.msg === 'Xray' && getLevelNum(log.level) === 30))
+    : logs;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 52px - 2.5rem)', gap: '0.75rem' }}>
       {/* Controls */}
@@ -143,11 +148,32 @@ export function Logs() {
               marginLeft: 'auto',
             }}
           >
-            {logs.length} lines
+            {displayedLogs.length} lines
           </span>
         </div>
 
         <div style={{ display: 'flex', gap: '0.375rem', flexShrink: 0 }}>
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.375rem',
+              fontSize: '0.8125rem',
+              color: 'var(--color-text-secondary)',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <label className="toggle" style={{ width: 32, height: 18 }}>
+              <input
+                type="checkbox"
+                checked={hideXray}
+                onChange={(e) => setHideXray(e.target.checked)}
+              />
+              <span className="toggle-track" />
+            </label>
+            Hide Xray
+          </label>
           <label
             style={{
               display: 'flex',
@@ -197,7 +223,7 @@ export function Logs() {
               No log entries
             </div>
           )}
-          {logs.map((entry, idx) => {
+          {displayedLogs.map((entry, idx) => {
             const extras    = getExtras(entry);
             const hasExtras = Object.keys(extras).length > 0;
             const isExpanded = expanded.has(idx);

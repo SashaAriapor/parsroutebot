@@ -25,9 +25,9 @@ export function volumePickerKeyboard(
       const labelB = b.gb === 0
         ? `♾️ نامحدود — ${formatToman(b.price)}`
         : `📦 ${formatGB(b.gb)} — ${formatToman(b.price)}`;
-      kb.text(labelA, `buy:vol:${a.gb}`).text(labelB, `buy:vol:${b.gb}`).row();
+      kb.text(labelA, `buy:direct:${a.gb}:${a.price}`).text(labelB, `buy:direct:${b.gb}:${b.price}`).row();
     } else {
-      kb.text(labelA, `buy:vol:${a.gb}`).row();
+      kb.text(labelA, `buy:direct:${a.gb}:${a.price}`).row();
     }
   }
   kb.text('❌ انصراف', 'buy:cancel');

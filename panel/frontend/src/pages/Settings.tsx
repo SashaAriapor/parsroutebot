@@ -34,6 +34,12 @@ const PANEL_FIELDS: Field[] = [
 const BOT_FIELDS: Field[] = [
   { key: 'admin_ids',  label: 'Admin IDs (comma-separated)', hint: 'Telegram user IDs with admin access' },
   { key: 'panel_port', label: 'Panel Port', type: 'number', placeholder: '3001' },
+  {
+    key: 'VRAY_CONFIG_LINK',
+    label: 'V2Ray Config Link',
+    placeholder: 'vless:// or vmess:// or trojan://',
+    hint: 'Bot will restart Xray core on save. Leave empty to use env proxy.',
+  },
 ];
 
 // ── Section form ─────────────────────────────────────────────────────────────
@@ -296,10 +302,13 @@ export function Settings() {
 
   const mutation = useMutation({
     mutationFn: (values: Settings) => api.patch('/settings', values),
-    onSuccess: () => {
+    onSuccess: async (_, variables) => {
       qc.invalidateQueries({ queryKey: ['settings'] });
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
+      if ('VRAY_CONFIG_LINK' in variables && variables['VRAY_CONFIG_LINK']) {
+        await api.post('/health/proxy/reconnect').catch(() => {});
+      }
     },
     onError: () => setError('Failed to save settings'),
   });

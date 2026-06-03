@@ -1,8 +1,14 @@
 FROM node:22-slim
 
 RUN apt-get update -y && \
-    apt-get install -y openssl ca-certificates && \
+    apt-get install -y openssl ca-certificates curl unzip && \
     rm -rf /var/lib/apt/lists/*
+
+RUN curl -Lo /tmp/xray.zip \
+    https://github.com/XTLS/Xray-core/releases/download/v1.8.24/Xray-linux-64.zip && \
+    unzip /tmp/xray.zip -d /usr/local/bin xray && \
+    chmod +x /usr/local/bin/xray && \
+    rm /tmp/xray.zip
 
 WORKDIR /app
 

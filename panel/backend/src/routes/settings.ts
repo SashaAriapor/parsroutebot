@@ -14,6 +14,7 @@ const SETTINGS_KEYS = [
   'PRICE_PER_GB_TOMAN',
   'SERVICE_DURATION_DAYS',
   'QUICK_PICK_GB',
+  'VRAY_CONFIG_LINK',
 ] as const;
 
 export const settingsRouter = new Hono();

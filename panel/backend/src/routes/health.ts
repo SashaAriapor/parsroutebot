@@ -3,6 +3,7 @@ import axios from 'axios';
 import { SocksProxyAgent } from 'socks-proxy-agent';
 import Redis from 'ioredis';
 import { prisma } from '../prisma';
+import { restartXray, isXrayRunning } from '../../../../src/workers/xray.worker';
 
 type ServiceStatus = 'ok' | 'error';
 
@@ -126,6 +127,13 @@ healthRouter.post('/restart', (c) => {
 });
 
 healthRouter.post('/proxy/reconnect', async (c) => {
+  if (isXrayRunning()) {
+    try {
+      await restartXray();
+    } catch (e: unknown) {
+      return c.json({ ok: false, note: e instanceof Error ? e.message : String(e) }, 500);
+    }
+  }
   const result = await checkProxy();
   return c.json({ ok: result.status === 'ok', ...result });
 });

@@ -3,6 +3,10 @@ import { config } from '@/lib/config';
 
 let _agent: SocksProxyAgent | null = null;
 
+export function resetProxyAgent(): void {
+  _agent = null;
+}
+
 export function getProxyAgent(): SocksProxyAgent | null {
   if (!config.SOCKS5_HOST) return null;
 

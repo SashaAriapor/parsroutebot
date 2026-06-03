@@ -6,10 +6,37 @@ import { createBot } from './bot/index';
 import { prisma } from './db/client';
 import { startAllWorkers } from './workers/index';
 import { startProxyHealthWorker } from './workers/proxy-health.worker';
+import { startXrayWorker, setOriginalProxy } from './workers/xray.worker';
+import { resetProxyAgent } from './lib/proxy';
 import { startPanel } from '../panel/backend/src/index';
 
 async function main() {
   logger.info({ env: config.NODE_ENV }, 'Starting bot');
+
+  // 1. Capture original proxy config before Xray may override it
+  setOriginalProxy({
+    host: config.SOCKS5_HOST,
+    port: config.SOCKS5_PORT,
+    user: config.SOCKS5_USER,
+    pass: config.SOCKS5_PASS,
+  });
+
+  // 2. Start Xray first so the proxy is ready before any outbound connections
+  const xrayStarted = await startXrayWorker();
+
+  // 3. If xray started, override proxy config before the proxy agent is created
+  if (xrayStarted) {
+    process.env.SOCKS5_HOST = '127.0.0.1';
+    process.env.SOCKS5_PORT = '10808';
+    process.env.SOCKS5_USER = '';
+    process.env.SOCKS5_PASS = '';
+    (config as Record<string, unknown>)['SOCKS5_HOST'] = '127.0.0.1';
+    (config as Record<string, unknown>)['SOCKS5_PORT'] = 10808;
+    (config as Record<string, unknown>)['SOCKS5_USER'] = undefined;
+    (config as Record<string, unknown>)['SOCKS5_PASS'] = undefined;
+    resetProxyAgent();
+    logger.info('Using Xray SOCKS5 proxy on 127.0.0.1:10808');
+  }
 
   const bot = createBot();
   startProxyHealthWorker();

@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
-import { exec, spawn } from 'child_process';
+import { readFileSync, statSync, openSync, readSync, closeSync } from 'fs';
 
-const CONTAINER = 'parsroute_bot';
+const LOG_FILE = '/tmp/bot.log';
 
 // Pino numeric levels: 10=trace,20=debug,30=info,40=warn,50=error,60=fatal
 const LEVEL_THRESHOLD: Record<string, number> = {
@@ -38,47 +38,50 @@ logsRouter.get('/', (c) => {
   const levelFilter = c.req.query('level') ?? 'all';
   const limit = Math.min(parseInt(c.req.query('limit') ?? '200', 10), 1000);
 
-  return new Promise<Response>((resolve) => {
-    exec(
-      `docker logs ${CONTAINER} --tail ${limit} 2>&1`,
-      { timeout: 30_000 },
-      (_err, stdout) => {
-        const lines = (stdout ?? '').trim().split('\n').filter(Boolean);
-        const logs = lines.map(parseLine).filter((e) => matchesLevel(e, levelFilter));
-        resolve(c.json({ logs }));
-      },
-    );
-  });
+  try {
+    const content = readFileSync(LOG_FILE, 'utf-8');
+    const lines = content.trim().split('\n').filter(Boolean).slice(-limit);
+    const logs = lines.map(parseLine).filter((e) => matchesLevel(e, levelFilter));
+    return c.json({ logs });
+  } catch {
+    return c.json({ logs: [] });
+  }
 });
 
 logsRouter.get('/stream', (c) => {
   const levelFilter = c.req.query('level') ?? 'all';
 
   return streamSSE(c, async (stream) => {
-    const child = spawn('docker', ['logs', CONTAINER, '-f', '--tail', '50', '--since', '0'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    let closed = false;
+    let offset = 0;
 
-    const handleData = async (data: Buffer) => {
-      const lines = data.toString().split('\n').filter(Boolean);
-      for (const line of lines) {
-        const entry = parseLine(line);
-        if (matchesLevel(entry, levelFilter)) {
-          await stream.writeSSE({ data: JSON.stringify(entry) });
+    try {
+      offset = statSync(LOG_FILE).size;
+    } catch { /* file may not exist yet */ }
+
+    stream.onAbort(() => { closed = true; });
+
+    while (!closed) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 500));
+      if (closed) break;
+
+      try {
+        const newSize = statSync(LOG_FILE).size;
+        if (newSize <= offset) continue;
+
+        const fd = openSync(LOG_FILE, 'r');
+        const buf = Buffer.alloc(newSize - offset);
+        readSync(fd, buf, 0, buf.length, offset);
+        closeSync(fd);
+        offset = newSize;
+
+        for (const line of buf.toString('utf-8').split('\n').filter(Boolean)) {
+          const entry = parseLine(line);
+          if (matchesLevel(entry, levelFilter)) {
+            await stream.writeSSE({ data: JSON.stringify(entry) });
+          }
         }
-      }
-    };
-
-    child.stdout?.on('data', handleData);
-    child.stderr?.on('data', handleData);
-
-    await new Promise<void>((resolve) => {
-      stream.onAbort(() => {
-        child.kill('SIGTERM');
-        resolve();
-      });
-      child.on('close', resolve);
-      child.on('error', resolve);
-    });
+      } catch { /* file disappeared or unreadable — skip */ }
+    }
   });
 });

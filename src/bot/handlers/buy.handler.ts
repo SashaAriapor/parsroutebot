@@ -616,6 +616,41 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
       return;
     }
 
+    // ── Direct volume selection with embedded price ──────────────────────────
+    if (data.startsWith('buy:direct:')) {
+      // callback format: buy:direct:{gb}:{price}
+      const parts = data.split(':');
+      const gb = parseInt(parts[2], 10);
+      const price = parseInt(parts[3], 10);
+
+      if (isNaN(gb) || gb < 0 || isNaN(price) || price <= 0) {
+        await ctx.answerCallbackQuery({ text: '❌ اطلاعات نامعتبر', show_alert: true });
+        return;
+      }
+
+      const state = getBuyState(userId);
+      if (!state?.categoryId) {
+        clearBuyState(userId);
+        await ctx.editMessageText('❌ اطلاعات سفارش منقضی شده. لطفاً دوباره شروع کن.');
+        await ctx.answerCallbackQuery();
+        return;
+      }
+
+      const { durationDays } = await getDurationAndPicks();
+
+      setBuyState(userId, {
+        trafficGB: gb,
+        durationDays,
+        basePriceToman: BigInt(price),
+        awaitingGBInput: false,
+        awaitingDiscountInput: true,
+      });
+
+      await renderDiscountScreen(ctx, true);
+      await ctx.answerCallbackQuery();
+      return;
+    }
+
     // ── Volume selection (userChoosesGb = false) ─────────────────────────────
     if (data.startsWith('buy:vol:')) {
       const gb = parseInt(data.slice('buy:vol:'.length), 10);
@@ -781,7 +816,7 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
     // ── Execute purchase ──────────────────────────────────────────────────────
     if (data === 'buy:execute') {
       const state = getBuyState(userId);
-      if (state?.trafficGB == null || (!state.categoryId && !state.serverId) || !state.pricePerGB || state.finalPriceToman == null) {
+      if (state?.trafficGB == null || (!state.categoryId && !state.serverId) || state.pricePerGB == null || state.finalPriceToman == null) {
         clearBuyState(userId);
         await ctx.editMessageText('❌ اطلاعات سفارش منقضی شده. لطفاً دوباره شروع کن.');
         await ctx.answerCallbackQuery();
@@ -831,7 +866,7 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
     // ── Card payment ──────────────────────────────────────────────────────────
     if (data === 'buy:pay:card') {
       const state = getBuyState(userId);
-      if (state?.trafficGB == null || (!state.categoryId && !state.serverId) || !state.pricePerGB || state.finalPriceToman == null) {
+      if (state?.trafficGB == null || (!state.categoryId && !state.serverId) || state.pricePerGB == null || state.finalPriceToman == null) {
         clearBuyState(userId);
         await ctx.editMessageText('❌ اطلاعات سفارش منقضی شده. لطفاً دوباره شروع کن.');
         await ctx.answerCallbackQuery();
