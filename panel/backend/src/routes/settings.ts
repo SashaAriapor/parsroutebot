@@ -15,6 +15,8 @@ const SETTINGS_KEYS = [
   'SERVICE_DURATION_DAYS',
   'QUICK_PICK_GB',
   'VRAY_CONFIG_LINK',
+  'WINAPAY_MERCHANT_ID',
+  'WINAPAY_CALLBACK_URL',
 ] as const;
 
 export const settingsRouter = new Hono();

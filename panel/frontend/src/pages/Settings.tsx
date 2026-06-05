@@ -10,6 +10,8 @@ type TabKey = 'payment' | 'channel' | 'panel' | 'bot' | 'env';
 interface Field { key: string; label: string; placeholder?: string; type?: string; hint?: string }
 
 const PAYMENT_FIELDS: Field[] = [
+  { key: 'WINAPAY_MERCHANT_ID',  label: 'WinaPay Merchant ID', hint: 'Required for online payment gateway (WinaPay)' },
+  { key: 'WINAPAY_CALLBACK_URL', label: 'WinaPay Callback URL', placeholder: 'http://YOUR_SERVER_IP:3005/api/webhook/winapay', hint: 'Auto-filled from .env — change only if your server address differs' },
   { key: 'card_number',       label: 'Card Number',      placeholder: '6037-xxxx-xxxx-xxxx' },
   { key: 'card_owner',        label: 'Card Owner Name' },
   { key: 'card_fee_percent',  label: 'Card Fee %',       placeholder: '15', type: 'number' },

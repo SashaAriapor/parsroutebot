@@ -35,6 +35,7 @@ enum PaymentMethod {
   WALLET
   TON
   CARD
+  WINAPAY
 }
 
 enum ConfigStatus {
@@ -246,6 +247,9 @@ model Order {
 
   cardReceiptMessageId Int?
   cardFeePercent       Int?
+
+  winapayAuthority     String?
+  winapayRefId         String?
 
   createdAt   DateTime  @default(now())
   paidAt      DateTime?

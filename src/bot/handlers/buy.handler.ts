@@ -24,6 +24,7 @@ import {
   insufficientBuyKeyboard,
   successKeyboard,
   buyTonInvoiceKeyboard,
+  buyWinapayInvoiceKeyboard,
 } from '../keyboards/buy.keyboard';
 
 // ─── Settings helpers ─────────────────────────────────────────────────────────
@@ -860,6 +861,63 @@ export function registerBuyHandler(bot: Bot<BotContext>): void {
         `مثال: john123 یا myaccount\n\n` +
         `برای اسم خودکار، فقط — بفرست`,
       );
+      return;
+    }
+
+    // ── WinaPay payment ───────────────────────────────────────────────────────
+    if (data === 'buy:pay:winapay') {
+      const state = getBuyState(userId);
+      if (state?.trafficGB == null || (!state.categoryId && !state.serverId) || state.finalPriceToman == null) {
+        clearBuyState(userId);
+        await ctx.editMessageText('❌ اطلاعات سفارش منقضی شده. لطفاً دوباره شروع کن.');
+        await ctx.answerCallbackQuery();
+        return;
+      }
+
+      await ctx.answerCallbackQuery({ text: '⏳ در حال ایجاد لینک پرداخت...' });
+
+      const result = await buyService.createPendingWinapayOrder({
+        userId: BigInt(userId),
+        serverId: state.serverId,
+        categoryId: state.categoryId,
+        trafficGB: state.trafficGB,
+        durationDays: state.durationDays!,
+        pricePerGB: state.pricePerGB!,
+        basePriceToman: state.basePriceToman,
+        discountCode: state.discountCode,
+        finalPriceToman: state.finalPriceToman,
+      });
+
+      if (!result.ok) {
+        const msgMap: Record<string, string> = {
+          GATEWAY_ERROR: `❌ خطا در اتصال به درگاه پرداخت.\n${result.reason}`,
+          SERVER_INACTIVE: '❌ این سرویس دیگه فعال نیست.',
+          INVALID_DISCOUNT: `❌ کد تخفیف منقضی شده: ${result.reason}`,
+          UNKNOWN: '❌ خطا در ثبت سفارش.',
+        };
+        await ctx.editMessageText(msgMap[result.code] ?? '❌ خطا در ثبت سفارش.');
+        clearBuyState(userId);
+        return;
+      }
+
+      clearBuyState(userId);
+
+      const serverDisplay = state.categoryServerName ?? state.serverId?.toString() ?? '—';
+      const text = [
+        '💳 <b>پرداخت آنلاین (ویناپی)</b>',
+        '',
+        `📦 ${formatGB(state.trafficGB!)} — ${state.durationDays!} روز`,
+        `📍 ${escapeHtml(serverDisplay)}`,
+        `💰 مبلغ: ${formatToman(state.finalPriceToman!)}`,
+        '',
+        '⏰ لینک تا ۱۵ دقیقه معتبره',
+        'بعد از پرداخت، به صورت خودکار سرویست فعال میشه.',
+      ].join('\n');
+
+      await ctx.editMessageText(text, {
+        parse_mode: 'HTML',
+        reply_markup: buyWinapayInvoiceKeyboard(result.paymentUrl, result.orderId),
+      });
       return;
     }
 

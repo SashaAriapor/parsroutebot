@@ -2,9 +2,11 @@ import { OrderStatus, PaymentMethod, WalletTxType } from '@prisma/client';
 import { prisma } from '@/db/client';
 import { pasarguardClient, generatePasarGuardUsername, gbToBytes, extractSubToken } from '@/adapters/pasarguard';
 import type { PasarGuardUser } from '@/adapters/pasarguard';
+import { winapayClient } from '@/adapters/winapay';
 import { discountService } from './discount.service';
 import { referralService } from './referral.service';
 import { tonInvoiceService } from './ton-invoice.service';
+import { settingsService } from './settings.service';
 import { config } from '@/lib/config';
 import { logger } from '@/lib/logger';
 
@@ -74,6 +76,22 @@ type PendingCardOrderParams = {
 type PendingCardOrderResult =
   | { ok: true; orderId: string; priceWithFee: bigint }
   | { ok: false; reason: string; code: 'SERVER_INACTIVE' | 'INVALID_DISCOUNT' | 'UNKNOWN' };
+
+type PendingWinapayOrderParams = {
+  userId: bigint;
+  serverId?: number;
+  categoryId?: number;
+  trafficGB: number;
+  durationDays: number;
+  pricePerGB: bigint;
+  basePriceToman?: bigint;
+  discountCode?: string;
+  finalPriceToman: bigint;
+};
+
+type PendingWinapayOrderResult =
+  | { ok: true; orderId: string; paymentUrl: string }
+  | { ok: false; reason: string; code: 'SERVER_INACTIVE' | 'INVALID_DISCOUNT' | 'GATEWAY_ERROR' | 'UNKNOWN' };
 
 export const buyService = {
   async createPendingTonOrder(params: PendingTonOrderParams): Promise<PendingTonOrderResult> {
@@ -186,6 +204,83 @@ export const buyService = {
     });
 
     return { ok: true, orderId: order.id, priceWithFee };
+  },
+
+  async createPendingWinapayOrder(params: PendingWinapayOrderParams): Promise<PendingWinapayOrderResult> {
+    if (params.serverId) {
+      const server = await prisma.server.findUnique({ where: { id: params.serverId } });
+      if (!server) return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
+      if (!server.isActive) return { ok: false, reason: 'این سرور دیگه فعال نیست.', code: 'SERVER_INACTIVE' };
+    } else if (params.categoryId) {
+      const category = await prisma.serviceCategory.findUnique({ where: { id: params.categoryId } });
+      if (!category) return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
+      if (!category.isActive) return { ok: false, reason: 'این دسته‌بندی دیگه فعال نیست.', code: 'SERVER_INACTIVE' };
+    } else {
+      return { ok: false, reason: 'اطلاعات سفارش یافت نشد.', code: 'UNKNOWN' };
+    }
+
+    const basePriceToman = params.basePriceToman ?? (params.pricePerGB * BigInt(params.trafficGB));
+
+    if (params.discountCode) {
+      const dcCheck = await discountService.validate(params.discountCode, params.userId, null, basePriceToman);
+      if (!dcCheck.ok) return { ok: false, reason: dcCheck.reason, code: 'INVALID_DISCOUNT' };
+    }
+
+    const [merchantIdSetting, callbackUrlSetting] = await Promise.all([
+      settingsService.get('WINAPAY_MERCHANT_ID'),
+      settingsService.get('WINAPAY_CALLBACK_URL'),
+    ]);
+    const merchantId = merchantIdSetting || config.WINAPAY_MERCHANT_ID;
+    const callbackUrl = callbackUrlSetting || config.WINAPAY_CALLBACK_URL;
+
+    if (!merchantId || !callbackUrl) {
+      return { ok: false, reason: 'درگاه پرداخت آنلاین پیکربندی نشده.', code: 'GATEWAY_ERROR' };
+    }
+
+    const order = await prisma.$transaction(async (tx) => {
+      if (params.discountCode) {
+        await discountService.consume(tx, params.discountCode);
+      }
+      return tx.order.create({
+        data: {
+          userId: params.userId,
+          planId: null,
+          serverId: params.serverId ?? null,
+          categoryId: params.categoryId ?? null,
+          trafficGB: params.trafficGB,
+          durationDays: params.durationDays,
+          pricePerGB: params.pricePerGB,
+          priceToman: params.finalPriceToman,
+          discountCode: params.discountCode ?? null,
+          discountAmount: basePriceToman - params.finalPriceToman,
+          paymentMethod: PaymentMethod.WINAPAY,
+          status: OrderStatus.PENDING,
+        },
+      });
+    });
+
+    const payResult = await winapayClient.requestPayment({
+      merchantId,
+      amount: params.finalPriceToman,
+      invoiceId: order.id,
+      description: `خرید سرویس ${params.trafficGB} گیگ`,
+      callbackUrl,
+    });
+
+    if (!payResult.ok) {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { status: OrderStatus.CANCELLED },
+      });
+      return { ok: false, reason: 'خطا در اتصال به درگاه پرداخت.', code: 'GATEWAY_ERROR' };
+    }
+
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { winapayAuthority: payResult.authority },
+    });
+
+    return { ok: true, orderId: order.id, paymentUrl: payResult.paymentUrl };
   },
 
   async createPendingWalletOrder(params: ExecuteParams): Promise<WalletOrderResult> {

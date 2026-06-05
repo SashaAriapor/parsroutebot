@@ -14,12 +14,14 @@ import { categoriesRouter } from './routes/categories';
 import { envRouter } from './routes/env';
 import { logsRouter } from './routes/logs';
 import { healthRouter } from './routes/health';
+import { buildWinapayWebhookRouter, type OnWinapayPaid } from './routes/winapay-webhook';
 
 export function startPanel(opts: {
   port: number;
   jwtSecret: string;
   adminUsername: string;
   adminPassword: string;
+  onWinapayPaid?: OnWinapayPaid;
 }) {
   const app = new Hono();
 
@@ -34,6 +36,7 @@ export function startPanel(opts: {
   const protect = jwtMiddleware(opts.jwtSecret);
 
   app.route('/api/auth', auth);
+  app.route('/api/webhook/winapay', buildWinapayWebhookRouter(opts.onWinapayPaid));
   app.use('/api/*', protect);
   app.route('/api/stats', statsRouter);
   app.route('/api/users', usersRouter);

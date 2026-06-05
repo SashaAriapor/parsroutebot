@@ -99,6 +99,9 @@ const schema = z.object({
   SOCKS5_USER: z.string().optional(),
   SOCKS5_PASS: z.string().optional(),
 
+  WINAPAY_MERCHANT_ID: z.string().optional(),
+  WINAPAY_CALLBACK_URL: z.string().optional(),
+
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   LOG_LEVEL: z.string().default('info'),
 

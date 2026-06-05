@@ -9,6 +9,8 @@ import { startProxyHealthWorker } from './workers/proxy-health.worker';
 import { startXrayWorker, setOriginalProxy } from './workers/xray.worker';
 import { resetProxyAgent } from './lib/proxy';
 import { startPanel } from '../panel/backend/src/index';
+import { setUserPending } from './bot/state/pending-user-input';
+import { generatePasarGuardUsername } from './adapters/pasarguard';
 
 async function main() {
   logger.info({ env: config.NODE_ENV }, 'Starting bot');
@@ -48,6 +50,17 @@ async function main() {
       jwtSecret: config.PANEL_JWT_SECRET,
       adminUsername: config.PANEL_ADMIN_USERNAME,
       adminPassword: config.PANEL_ADMIN_PASSWORD,
+      onWinapayPaid: async (userId, orderId, generatedName) => {
+        setUserPending(Number(userId), { kind: 'account-name-input', orderId, generatedName });
+        await bot.api.sendMessage(
+          Number(userId),
+          '✅ پرداخت موفق!\n\n' +
+          'یه اسم برای اکانتت انتخاب کن:\n\n' +
+          '⚠️ فقط حروف انگلیسی و عدد — بدون فاصله یا کاراکتر خاص\n' +
+          'مثال: john123 یا myaccount\n\n' +
+          'برای اسم خودکار، فقط — بفرست',
+        );
+      },
     });
     logger.info({ port: config.PANEL_PORT }, 'Admin panel started');
   }
